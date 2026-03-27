@@ -1,0 +1,13 @@
+{
+  "bytes_sent_dest1": 0,
+  "bytes_sent_dest2": 0,
+  "bytes_at_reset_dest1": 0,
+  "bytes_at_reset_dest2": 0,
+  "last_reset": 1774635186,
+  "last_status_sent": 1774635186,
+  "daily_budget_mb": 450,
+  "daily_budget_bytes": 471859200,
+  "blocked": false,
+  "block_reason": "",
+  "updated_at": "2026-03-27T18:13:51Z"
+}

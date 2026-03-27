@@ -223,7 +223,11 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state,
         return 0, 0, 0
 
     total_in_folder = len(uids)
-    log(f"  {src_folder}: {total_in_folder} messages to process (batch_size={BATCH_SIZE})")
+
+    # Process newest-first so small limits hit immediately
+    uids = list(reversed(uids))
+
+    log(f"  {src_folder}: {total_in_folder} messages found, processing newest-first (batch_size={BATCH_SIZE})")
 
     copied = 0
     total_bytes = 0
@@ -239,6 +243,9 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state,
     batch_start_time = time.time()
     batch_copied = 0
     batch_bytes = 0
+
+    # If skip_dedup and small email limit, we can stop after limit is reached
+    effective_limit = limit_emails if limit_emails else 0
 
     for uid in uids:
         if resume:
