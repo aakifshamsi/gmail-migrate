@@ -104,7 +104,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y imapsync curl python3
+          sudo apt-get install -y libio-socket-ssl-perl libjson-pp-perl libwww-perl curl python3
+          curl -o /tmp/imapsync https://raw.githubusercontent.com/imapsync/imapsync/master/imapsync
+          chmod +x /tmp/imapsync
+          sudo mv /tmp/imapsync /usr/local/bin/imapsync
           imapsync --version
 
       - name: Prepare scripts
