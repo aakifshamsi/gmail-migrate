@@ -132,21 +132,15 @@ jobs:
       - name: Install imapsync
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y \
-            libio-socket-ssl-perl \
-            libdigest-hmac-perl \
-            libterm-readkey-perl \
-            libjson-pp-perl \
-            libwww-perl \
-            libfile-copy-recursive-perl \
-            libunicode-string-perl \
-            libdata-dump-perl \
-            libmail-imapclient-perl \
-            libauthen-ntlm-perl \
-            libio-socket-inet6-perl \
-            curl python3
+          sudo apt-get install -y cpanminus curl python3
           curl -o /tmp/imapsync https://raw.githubusercontent.com/imapsync/imapsync/master/imapsync
           chmod +x /tmp/imapsync
+          # Extract required modules from imapsync and install them
+          head -1000 /tmp/imapsync | grep "^use " | sed 's/use //; s/[ ;].*//' | while read mod; do
+            cpanm --notest "$mod" 2>/dev/null || true
+          done
+          # Known critical modules
+          cpanm --notest Digest::HMAC_SHA1 Encode::IMAPUTF7 Mail::IMAPClient Authen::NTLM IO::Socket::SSL 2>&1
           sudo mv /tmp/imapsync /usr/local/bin/imapsync
           imapsync --version
 
