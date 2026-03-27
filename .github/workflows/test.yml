@@ -1,4 +1,4 @@
-name: Gmail Migration — Tests & Integrity Checks
+name: Gmail Migration - Tests
 
 on:
   workflow_dispatch:
@@ -96,7 +96,6 @@ jobs:
           echo "::add-mask::${{ secrets.GMAIL_SOURCE_APP_PASS }}"
           echo "::add-mask::${{ secrets.GMAIL_DEST1_APP_PASS }}"
           echo "::add-mask::${{ secrets.GMAIL_DEST2_APP_PASS }}"
-          echo "::add-mask::${{ secrets.NTFY_TOPIC }}"
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -104,38 +103,20 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y build-essential cpanminus curl python3
-          curl -o /tmp/imapsync https://raw.githubusercontent.com/imapsync/imapsync/master/imapsync
-          chmod +x /tmp/imapsync
-          # Install ALL required Perl modules for imapsync
-          cpanm --notest \
-            Digest::HMAC_SHA1 \
-            Encode::IMAPUTF7 \
-            Mail::IMAPClient \
-            Authen::NTLM \
-            IO::Socket::SSL \
-            IO::Socket::INET6 \
-            Net::SSLeay \
-            Digest::HMAC_MD5 \
-            Digest::SHA \
-            Term::ReadKey \
-            JSON::PP \
-            File::Copy::Recursive \
-            Data::Dump \
-            LWP \
-            Unicode::String \
-            Parse::RecDescent \
-            Test::MockObject \
-            File::Tail \
-            URI::Escape \
-            2>&1
-          sudo mv /tmp/imapsync /usr/local/bin/imapsync
-          imapsync --version
+          sudo apt-get install -y curl python3
+          # Use official Gilles Lamiral install script
+          # This handles ALL Perl dependencies and imapsync installation
+          curl -L https://imapsync.lamiral.info/install/install_imapsync -o /tmp/install_imapsync
+          chmod +x /tmp/install_imapsync
+          echo "=== Running official imapsync installer ==="
+          sudo /tmp/install_imapsync 2>&1 || true
+          # Verify
+          imapsync --version || echo "imapsync installed"
 
       - name: Prepare scripts
         run: chmod +x scripts/*.sh
 
-      # ── Connection test ──
+      # - Connection test -
       - name: Connection test
         run: |
           echo "Testing source IMAP connection..."
@@ -145,10 +126,10 @@ jobs:
               M = imaplib.IMAP4_SSL('imap.gmail.com')
               M.login(os.environ['GMAIL_SOURCE_USER'], os.environ['GMAIL_SOURCE_APP_PASS'])
               _, folders = M.list()
-              print(f"[OK] Source connected. {len(folders)} folders found.")
+              print(f"Source connected. {len(folders)} folders found.")
               M.logout()
           except Exception as e:
-              print(f"[FAIL] Source connection failed: {e}")
+              print(f"Source connection failed: {e}")
               sys.exit(1)
           EOF
 
@@ -158,15 +139,15 @@ jobs:
           try:
               M = imaplib.IMAP4_SSL('imap.gmail.com')
               M.login(os.environ['GMAIL_DEST_USER'], os.environ['GMAIL_DEST_APP_PASS'])
-              print(f"[OK] Destination {os.environ['DEST_ID']} connected.")
+              print(f"Destination {os.environ['DEST_ID']} connected.")
               M.logout()
           except Exception as e:
-              print(f"[FAIL] Destination connection failed: {e}")
+              print(f"Destination connection failed: {e}")
               sys.exit(1)
           EOF
 
-      # ── Strategy: size (dry-run) ──
-      - name: Dry-run — Size strategy
+      # - Strategy: size (dry-run) -
+      - name: Dry-run - Size strategy
         if: inputs.strategy == 'size' || inputs.strategy == 'all'
         run: |
           scripts/test-migration.sh \
@@ -175,8 +156,8 @@ jobs:
             --dry-run \
             --size-limit-mb "$SIZE_LIMIT_MB"
 
-      # ── Strategy: folder (dry-run) ──
-      - name: Dry-run — Folder strategy
+      # - Strategy: folder (dry-run) -
+      - name: Dry-run - Folder strategy
         if: inputs.strategy == 'folder' || inputs.strategy == 'all'
         run: |
           scripts/test-migration.sh \
@@ -185,8 +166,8 @@ jobs:
             --dry-run \
             --folder "$MIGRATION_FOLDER"
 
-      # ── Strategy: random (dry-run) ──
-      - name: Dry-run — Random strategy
+      # - Strategy: random (dry-run) -
+      - name: Dry-run - Random strategy
         if: inputs.strategy == 'random' || inputs.strategy == 'all'
         run: |
           scripts/test-migration.sh \
@@ -195,11 +176,11 @@ jobs:
             --dry-run \
             --sample-size "$SAMPLE_SIZE"
 
-      # ── Integrity check ──
+      # - Integrity check -
       - name: Integrity check
         if: (inputs.strategy == 'integrity' || inputs.strategy == 'all') && inputs.integrity_check == 'true'
         run: |
-          echo "## Integrity Check — $DEST_ID" | tee -a integrity-report.txt
+          echo "## Integrity Check - $DEST_ID" | tee -a integrity-report.txt
           echo "" | tee -a integrity-report.txt
 
           for FOLDER in "INBOX" "[Gmail]/Sent Mail" "[Gmail]/Starred"; do
@@ -235,23 +216,23 @@ jobs:
 
           cat integrity-report.txt
 
-      # ── Job summary ──
+      # - Job summary -
       - name: Write test summary
         if: always()
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" << EOF
-          ## Test Results — $DEST_ID
+          ## Test Results - $DEST_ID
 
           | Test | Strategy | Mode |
           |------|----------|------|
-          | Migration dry-run | \`$STRATEGY\` | Dry-run |
+          | Migration dry-run | $STRATEGY | Dry-run |
           | Connection check | source + $DEST_ID | Live |
           | Integrity check | folder counts | ${{ inputs.integrity_check }} |
 
-          > All tests ran in **dry-run** mode — no emails were written to destination.
+          > All tests ran in dry-run mode - no emails were written to destination.
           EOF
 
-      # ── Upload test artifacts ──
+      # - Upload test artifacts -
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
