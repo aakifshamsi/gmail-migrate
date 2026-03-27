@@ -472,21 +472,14 @@ jobs:
           if [ "$STATUS" = "success" ]; then
             bash scripts/notify.sh \
               "cleanup" \
-              " Source Cleanup Complete" \
-              "Messages deleted from source: ${DELETED_COUNT}
-Storage freed: ${DELETED_HR}
-Source: aakifshamsi@gmail.com
-Both destinations verified [OK]
-
+              "Source Cleanup Complete" \
+              "Messages deleted from source: ${DELETED_COUNT}, Storage freed: ${DELETED_HR}, Source: aakifshamsi@gmail.com, Both destinations verified [OK]" \
               "high"
           else
             bash scripts/notify.sh \
               "error" \
               "[FAIL] Source Cleanup Failed" \
-              "Deletion from source encountered errors.
-Check: ${{ steps.delete.outcome }}
-Messages deleted before error: ${DELETED_HR}
-
+              "Deletion from source encountered errors. Check: ${STATUS}, Messages deleted before error: ${DELETED_HR}" \
               "urgent"
           fi
 
