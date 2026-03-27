@@ -284,10 +284,8 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state,
 
             # Append to destination
             if not DRY_RUN:
-                # Gmail APPEND requires FLAGS and a date — use current time
-                # imaplib sends None as literal "None" which Gmail rejects
-                date_str = datetime.now(timezone.utc).strftime("%d-%b-%Y %H:%M:%S +0000")
-                retry(dest_M.append, dest_folder, '(\\Seen)', date_str, raw, label=f"append UID {uid}")
+                # Gmail APPEND requires FLAGS and a date — pass timestamp as float
+                retry(dest_M.append, dest_folder, '(\\Seen)', time.time(), raw, label=f"append UID {uid}")
                 copied += 1
                 total_bytes += msg_size
             else:
@@ -464,8 +462,7 @@ def main():
                 if raw:
                     if not DRY_RUN:
                         create_folder_if_needed(dest_M, dest_folder)
-                        date_str = datetime.now(timezone.utc).strftime("%d-%b-%Y %H:%M:%S +0000")
-                        retry(dest_M.append, dest_folder, '(\\Seen)', date_str, raw, label=f"append UID {uid}")
+                        retry(dest_M.append, dest_folder, '(\\Seen)', time.time(), raw, label=f"append UID {uid}")
                     total_copied += 1
                     total_bytes += len(raw)
 
