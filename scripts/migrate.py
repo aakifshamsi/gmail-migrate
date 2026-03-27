@@ -284,7 +284,8 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state,
 
             # Append to destination
             if not DRY_RUN:
-                retry(dest_M.append, dest_folder, None, None, raw, label=f"append UID {uid}")
+                # Gmail APPEND requires FLAGS — use \Seen for migrated mail
+                retry(dest_M.append, dest_folder, '(\\Seen)', None, raw, label=f"append UID {uid}")
                 copied += 1
                 total_bytes += msg_size
             else:
@@ -461,7 +462,7 @@ def main():
                 if raw:
                     if not DRY_RUN:
                         create_folder_if_needed(dest_M, dest_folder)
-                        retry(dest_M.append, dest_folder, None, None, raw, label=f"append UID {uid}")
+                        retry(dest_M.append, dest_folder, '(\\Seen)', None, raw, label=f"append UID {uid}")
                     total_copied += 1
                     total_bytes += len(raw)
 
