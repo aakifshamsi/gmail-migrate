@@ -132,15 +132,31 @@ jobs:
       - name: Install imapsync
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y cpanminus curl python3
+          sudo apt-get install -y build-essential cpanminus curl python3
           curl -o /tmp/imapsync https://raw.githubusercontent.com/imapsync/imapsync/master/imapsync
           chmod +x /tmp/imapsync
-          # Extract required modules from imapsync and install them
-          head -1000 /tmp/imapsync | grep "^use " | sed 's/use //; s/[ ;].*//' | while read mod; do
-            cpanm --notest "$mod" 2>/dev/null || true
-          done
-          # Known critical modules
-          cpanm --notest Digest::HMAC_SHA1 Encode::IMAPUTF7 Mail::IMAPClient Authen::NTLM IO::Socket::SSL 2>&1
+          # Install ALL required Perl modules for imapsync
+          cpanm --notest \
+            Digest::HMAC_SHA1 \
+            Encode::IMAPUTF7 \
+            Mail::IMAPClient \
+            Authen::NTLM \
+            IO::Socket::SSL \
+            IO::Socket::INET6 \
+            Net::SSLeay \
+            Digest::HMAC_MD5 \
+            Digest::SHA \
+            Term::ReadKey \
+            JSON::PP \
+            File::Copy::Recursive \
+            Data::Dump \
+            LWP \
+            Unicode::String \
+            Parse::RecDescent \
+            Test::MockObject \
+            File::Tail \
+            URI::Escape \
+            2>&1
           sudo mv /tmp/imapsync /usr/local/bin/imapsync
           imapsync --version
 
