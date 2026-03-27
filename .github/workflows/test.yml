@@ -1,0 +1,231 @@
+name: Gmail Migration — Tests & Integrity Checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: 'Test strategy to run'
+        required: true
+        default: 'size'
+        type: choice
+        options:
+          - size
+          - folder
+          - random
+          - integrity
+          - all
+      size_limit_mb:
+        description: 'Size limit for size strategy dry-run (MB)'
+        required: false
+        default: '100'
+        type: string
+      folder:
+        description: 'Folder for folder strategy dry-run'
+        required: false
+        default: 'INBOX'
+        type: string
+      sample_size:
+        description: 'Sample count for random strategy'
+        required: false
+        default: '20'
+        type: string
+      destination:
+        description: 'Which destination to test against'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - dest1
+          - dest2
+      integrity_check:
+        description: 'Run post-migration integrity check (requires prior migration)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: dest1
+            user_secret: GMAIL_DEST1_USER
+            pass_secret: GMAIL_DEST1_APP_PASS
+            state_file: migration-state-dest1.json
+          - id: dest2
+            user_secret: GMAIL_DEST2_USER
+            pass_secret: GMAIL_DEST2_APP_PASS
+            state_file: migration-state-dest2.json
+
+    env:
+      DEST_ID:            ${{ matrix.id }}
+      GMAIL_DEST_USER:    ${{ secrets[matrix.user_secret] }}
+      GMAIL_DEST_APP_PASS: ${{ secrets[matrix.pass_secret] }}
+      STATE_FILE:         ${{ matrix.state_file }}
+      GMAIL_SOURCE_USER:  ${{ secrets.GMAIL_SOURCE_USER }}
+      GMAIL_SOURCE_APP_PASS: ${{ secrets.GMAIL_SOURCE_APP_PASS }}
+      NTFY_TOPIC:         ${{ secrets.NTFY_TOPIC }}
+      STRATEGY:           ${{ inputs.strategy }}
+      SIZE_LIMIT_MB:      ${{ inputs.size_limit_mb }}
+      MIGRATION_FOLDER:   ${{ inputs.folder }}
+      SAMPLE_SIZE:        ${{ inputs.sample_size }}
+      DRY_RUN:            'true'
+
+    # Skip matrix entry if destination not selected
+    if: |
+      inputs.destination == 'both' ||
+      inputs.destination == matrix.id
+
+    steps:
+      - name: Mask secrets
+        run: |
+          echo "::add-mask::${{ secrets.GMAIL_SOURCE_APP_PASS }}"
+          echo "::add-mask::${{ secrets.GMAIL_DEST1_APP_PASS }}"
+          echo "::add-mask::${{ secrets.GMAIL_DEST2_APP_PASS }}"
+          echo "::add-mask::${{ secrets.NTFY_TOPIC }}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y imapsync curl python3
+          imapsync --version
+
+      - name: Prepare scripts
+        run: chmod +x scripts/*.sh
+
+      # ── Strategy: size (dry-run) ──
+      - name: Dry-run — Size strategy
+        if: inputs.strategy == 'size' || inputs.strategy == 'all'
+        run: |
+          scripts/test-migration.sh \
+            --strategy size \
+            --dest "$DEST_ID" \
+            --dry-run \
+            --size-limit-mb "$SIZE_LIMIT_MB"
+
+      # ── Strategy: folder (dry-run) ──
+      - name: Dry-run — Folder strategy
+        if: inputs.strategy == 'folder' || inputs.strategy == 'all'
+        run: |
+          scripts/test-migration.sh \
+            --strategy folder \
+            --dest "$DEST_ID" \
+            --dry-run \
+            --folder "$MIGRATION_FOLDER"
+
+      # ── Strategy: random (dry-run) ──
+      - name: Dry-run — Random strategy
+        if: inputs.strategy == 'random' || inputs.strategy == 'all'
+        run: |
+          scripts/test-migration.sh \
+            --strategy random \
+            --dest "$DEST_ID" \
+            --dry-run \
+            --sample-size "$SAMPLE_SIZE"
+
+      # ── Integrity check ──
+      - name: Integrity check
+        if: (inputs.strategy == 'integrity' || inputs.strategy == 'all') && inputs.integrity_check == 'true'
+        run: |
+          echo "## Integrity Check — $DEST_ID" | tee -a integrity-report.txt
+          echo "" | tee -a integrity-report.txt
+          
+          for FOLDER in "INBOX" "[Gmail]/Sent Mail" "[Gmail]/Starred"; do
+            DEST_FOLDER="G-${GMAIL_SOURCE_USER}/${FOLDER}"
+            python3 - <<EOF >> integrity-report.txt
+          import imaplib, os, sys
+
+          def count(host, user, pwd, folder):
+              try:
+                  M = imaplib.IMAP4_SSL(host)
+                  M.login(user, pwd)
+                  _, data = M.select(f'"{folder}"', readonly=True)
+                  count = int(data[0]) if data[0] and data[0].isdigit() else 0
+                  M.logout()
+                  return count
+              except Exception as e:
+                  return f"ERR:{e}"
+
+          src = count('imap.gmail.com', os.environ['GMAIL_SOURCE_USER'],
+                      os.environ['GMAIL_SOURCE_APP_PASS'], '${FOLDER}')
+          dst = count('imap.gmail.com', os.environ['GMAIL_DEST_USER'],
+                      os.environ['GMAIL_DEST_APP_PASS'], '${DEST_FOLDER}')
+
+          if isinstance(src, int) and isinstance(dst, int):
+              delta = src - dst
+              status = "MATCH" if delta == 0 else f"DELTA:{delta}"
+          else:
+              status = f"ERROR src={src} dst={dst}"
+
+          print(f"  ${FOLDER}: src={src}  dest={dst}  [{status}]")
+          EOF
+          done
+          
+          cat integrity-report.txt
+
+      # ── Connection test ──
+      - name: Connection test
+        run: |
+          echo "Testing source IMAP connection..."
+          python3 - << 'EOF'
+          import imaplib, os, sys
+          try:
+              M = imaplib.IMAP4_SSL('imap.gmail.com')
+              M.login(os.environ['GMAIL_SOURCE_USER'], os.environ['GMAIL_SOURCE_APP_PASS'])
+              _, folders = M.list()
+              print(f"✅ Source connected. {len(folders)} folders found.")
+              M.logout()
+          except Exception as e:
+              print(f"❌ Source connection failed: {e}")
+              sys.exit(1)
+          EOF
+
+          echo "Testing destination IMAP connection..."
+          python3 - << 'EOF'
+          import imaplib, os, sys
+          try:
+              M = imaplib.IMAP4_SSL('imap.gmail.com')
+              M.login(os.environ['GMAIL_DEST_USER'], os.environ['GMAIL_DEST_APP_PASS'])
+              print(f"✅ Destination {os.environ['DEST_ID']} connected.")
+              M.logout()
+          except Exception as e:
+              print(f"❌ Destination connection failed: {e}")
+              sys.exit(1)
+          EOF
+
+      # ── Job summary ──
+      - name: Write test summary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## Test Results — $DEST_ID
+
+          | Test | Strategy | Mode |
+          |------|----------|------|
+          | Migration dry-run | \`$STRATEGY\` | Dry-run |
+          | Connection check | source + $DEST_ID | Live |
+          | Integrity check | folder counts | ${{ inputs.integrity_check }} |
+
+          > All tests ran in **dry-run** mode — no emails were written to destination.
+          EOF
+
+      # ── Upload test artifacts ──
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.id }}-run-${{ github.run_number }}
+          path: |
+            *.log
+            integrity-report.txt
+          retention-days: 14
+          if-no-files-found: ignore

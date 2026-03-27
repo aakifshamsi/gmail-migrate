@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "source_account": "REDACTED",
+  "destination": "",
+  "strategy": "",
+  "processed_emails": 0,
+  "processed_bytes": 0,
+  "last_uid": null,
+  "last_folder": null,
+  "status": "pending",
+  "started_at": null,
+  "updated_at": null,
+  "target_emails": null,
+  "target_bytes": null,
+  "errors": []
+}
