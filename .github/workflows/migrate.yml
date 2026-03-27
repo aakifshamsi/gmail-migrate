@@ -41,6 +41,31 @@ on:
         required: false
         default: false
         type: boolean
+      skip_dedup:
+        description: 'Skip Message-ID dedup check (use for first run on empty destinations)'
+        required: false
+        default: false
+        type: boolean
+      date_since:
+        description: 'Only migrate messages since this date (DD-Mon-YYYY format, e.g., 01-Jan-2024)'
+        required: false
+        default: ''
+        type: string
+      date_before:
+        description: 'Only migrate messages before this date (DD-Mon-YYYY format)'
+        required: false
+        default: ''
+        type: string
+      folder_whitelist:
+        description: 'Comma-separated folder names to process (empty = all folders)'
+        required: false
+        default: ''
+        type: string
+      batch_size:
+        description: 'Messages per batch for progress reporting'
+        required: false
+        default: '10'
+        type: string
       destination:
         description: 'Target destination(s)'
         required: true
@@ -111,7 +136,12 @@ jobs:
       EMAIL_LIMIT:        ${{ inputs.email_limit || '0' }}
       MIGRATION_FOLDER:   ${{ inputs.folder || 'INBOX' }}
       SAMPLE_SIZE:        ${{ inputs.sample_size || '50' }}
-      DRY_RUN:            ${{ inputs.dry_run || 'false' }}
+      DRY_RUN:            ${{ fromJSON(inputs.dry_run || false) && 'true' || 'false' }}
+      SKIP_DEDUP:         ${{ fromJSON(inputs.skip_dedup || false) && 'true' || 'false' }}
+      DATE_SINCE:         ${{ inputs.date_since || '' }}
+      DATE_BEFORE:        ${{ inputs.date_before || '' }}
+      FOLDER_WHITELIST:   ${{ inputs.folder_whitelist || '' }}
+      BATCH_SIZE:         ${{ inputs.batch_size || '10' }}
 
     steps:
       # ── Security: mask secrets in all subsequent log output ──

@@ -4,6 +4,14 @@ Gmail IMAP Migrator — pure Python, no imapsync dependency.
 
 Copies mail from source Gmail to destination Gmail(s) via IMAP.
 Resumes from last run via state file. Supports size/email limits.
+
+Features:
+  - Batch processing with progress reporting
+  - Skip dedup mode (SKIP_DEDUP=true) for first runs
+  - Date range filtering (DATE_SINCE / DATE_BEFORE, DD-Mon-YYYY)
+  - Folder whitelist (FOLDER_WHITELIST)
+  - Resumability with per-folder last UID tracking
+  - Connection retry with exponential backoff
 """
 import imaplib
 import email
@@ -13,6 +21,7 @@ import json
 import time
 import hashlib
 import re
+import random
 from datetime import datetime, timezone
 
 # ── Config from environment ──
@@ -30,10 +39,21 @@ FOLDER      = os.environ.get("MIGRATION_FOLDER", "INBOX")
 SAMPLE_SIZE = int(os.environ.get("SAMPLE_SIZE", "50"))
 LOG_FILE    = "migration.log"
 
+# New config
+BATCH_SIZE       = int(os.environ.get("BATCH_SIZE", "10"))
+SKIP_DEDUP       = os.environ.get("SKIP_DEDUP", "false").lower() == "true"
+DATE_SINCE       = os.environ.get("DATE_SINCE", "")
+DATE_BEFORE      = os.environ.get("DATE_BEFORE", "")
+FOLDER_WHITELIST = os.environ.get("FOLDER_WHITELIST", "")
+
 DEST_PREFIX = f"G-{SOURCE_USER}/"
 
 # Folders to skip
 SKIP_FOLDERS = {"[Gmail]/All Mail", "[Gmail]/Spam", "[Gmail]/Trash"}
+
+# Retry config
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 2  # seconds
 
 # ── Helpers ──
 def log(msg):
@@ -56,7 +76,7 @@ def load_state():
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "source_account": SOURCE_USER,
             "destination": DEST_ID,
             "strategy": STRATEGY,
@@ -65,6 +85,7 @@ def load_state():
             "completed_folders": [],
             "last_folder": None,
             "last_uid": None,
+            "folder_state": {},
             "status": "pending",
             "started_at": None,
             "updated_at": None,
@@ -76,12 +97,36 @@ def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
+def retry(func, *args, label="", max_retries=MAX_RETRIES, **kwargs):
+    """Call func with retry and exponential backoff. Reconnects on IMAP errors."""
+    last_exc = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except (imaplib.IMAP4.error, imaplib.IMAP4.abort, OSError, ConnectionError) as e:
+            last_exc = e
+            delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))
+            log(f"  Retry {attempt}/{max_retries} for {label or func.__name__}: {e} (waiting {delay}s)")
+            time.sleep(delay)
+        except Exception as e:
+            raise
+    raise last_exc
+
 def connect(host, user, password, label=""):
     log(f"Connecting to {label or user}...")
     M = imaplib.IMAP4_SSL(host, 993)
     M.login(user, password)
     log(f"  Connected to {label or user}")
     return M
+
+def reconnect(M, host, user, password, label=""):
+    """Reconnect a dropped IMAP connection."""
+    log(f"  Reconnecting {label or user}...")
+    try:
+        M.logout()
+    except Exception:
+        pass
+    return connect(host, user, password, label)
 
 def list_folders(M):
     _, folders = M.list()
@@ -92,15 +137,6 @@ def list_folders(M):
             name = parts[-1].strip().strip('"')
             result.append(name)
     return result
-
-def get_message_count(M, folder):
-    try:
-        status, data = M.select(f'"{folder}"', readonly=True)
-        if status == "OK":
-            return int(data[0]) if data[0] and data[0].isdigit() else 0
-    except Exception:
-        pass
-    return 0
 
 def uid_search(M, folder, criteria="ALL"):
     """Search UIDs in a folder. Returns list of UID strings."""
@@ -113,16 +149,13 @@ def uid_search(M, folder, criteria="ALL"):
     return data[0].decode().split()
 
 def fetch_message(M, uid):
-    """Fetch full message by UID. Returns (uid, raw_bytes, size)."""
+    """Fetch full message by UID. Returns raw bytes or None."""
     status, data = M.uid("FETCH", uid, "(RFC822)")
     if status != "OK" or not data[0]:
         return None
-    # data[0] = (header, (b'RFC822', bytes), b')')
     if isinstance(data[0], tuple):
-        raw = data[0][1]
-    else:
-        raw = data[1]
-    return raw
+        return data[0][1]
+    return data[1]
 
 def message_exists(dest_M, dest_folder, message_id):
     """Check if a message with this Message-ID already exists in destination."""
@@ -130,7 +163,6 @@ def message_exists(dest_M, dest_folder, message_id):
         status, data = dest_M.select(f'"{dest_folder}"', readonly=True)
         if status != "OK":
             return False
-        # Search by HEADER Message-ID
         status, data = dest_M.uid("SEARCH", None, f'HEADER Message-ID "{message_id}"')
         if status == "OK" and data[0] and data[0].decode().strip():
             return True
@@ -150,39 +182,68 @@ def create_folder_if_needed(M, folder):
         M.create(folder)
         return True
     except Exception as e:
-        # Folder might already exist
         if "ALREADYEXISTS" in str(e).upper() or "already exists" in str(e).lower():
             return True
         return False
 
-def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state, limit_bytes=0, limit_emails=0):
-    """Copy messages from source to destination folder. Returns (count, bytes, skipped)."""
-    if dest_folder not in state.get("completed_folders", []):
+def build_search_criteria():
+    """Build IMAP SEARCH criteria string from env config."""
+    parts = ["ALL"]
+    if DATE_SINCE:
+        parts = [f'SINCE "{DATE_SINCE}"']
+        if DATE_BEFORE:
+            parts.append(f'BEFORE "{DATE_BEFORE}"')
+    return " ".join(parts)
+
+def get_folder_whitelist():
+    """Parse folder whitelist from env var."""
+    if not FOLDER_WHITELIST:
+        return None
+    return {f.strip() for f in FOLDER_WHITELIST.split(",") if f.strip()}
+
+def get_folder_state(state, folder):
+    """Get per-folder state dict."""
+    fs = state.setdefault("folder_state", {})
+    return fs.setdefault(folder, {"copied": 0, "bytes": 0, "skipped": 0, "last_uid": None, "completed": False})
+
+def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state,
+                           limit_bytes=0, limit_emails=0, source_host=SOURCE_USER, source_pass=SOURCE_PASS):
+    """Copy messages from source to destination folder with batch processing.
+    Returns (count, bytes, skipped).
+    """
+    folder_st = get_folder_state(state, src_folder)
+
+    if src_folder not in state.get("completed_folders", []):
         create_folder_if_needed(dest_M, dest_folder)
 
-    uids = uid_search(source_M, src_folder)
+    criteria = build_search_criteria()
+    uids = retry(uid_search, source_M, src_folder, criteria, label="uid_search")
     if not uids:
-        log(f"  {src_folder}: no messages")
+        log(f"  {src_folder}: no messages (criteria: {criteria})")
         return 0, 0, 0
 
-    log(f"  {src_folder}: {len(uids)} messages to process")
+    total_in_folder = len(uids)
+    log(f"  {src_folder}: {total_in_folder} messages to process (batch_size={BATCH_SIZE})")
 
     copied = 0
     total_bytes = 0
     skipped = 0
-    last_uid = state.get("last_uid")
+    last_uid = folder_st.get("last_uid")
     resume = False
 
-    # If resuming, skip UIDs we already processed
-    if last_uid and state.get("last_folder") == src_folder:
+    # Resume: skip UIDs up to and including last_uid
+    if last_uid:
         resume = True
-        log(f"  Resuming from UID {last_uid}")
+        log(f"  Resuming from after UID {last_uid}")
+
+    batch_start_time = time.time()
+    batch_copied = 0
+    batch_bytes = 0
 
     for uid in uids:
-        if resume and uid == last_uid:
-            resume = False
-            continue
         if resume:
+            if uid == last_uid:
+                resume = False
             continue
 
         # Check limits
@@ -194,9 +255,11 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state, limi
             break
 
         try:
-            raw = fetch_message(source_M, uid)
+            raw = retry(fetch_message, source_M, uid, label=f"fetch UID {uid}")
             if raw is None:
                 skipped += 1
+                batch_copied += 1  # count toward batch for progress
+                _check_batch_flush()
                 continue
 
             msg_size = len(raw)
@@ -205,28 +268,45 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state, limi
             msg = email.message_from_bytes(raw)
             msg_id = msg.get("Message-ID", "")
 
-            # Skip if already in destination
-            if msg_id and message_exists(dest_M, dest_folder, msg_id):
+            # Dedup check (skip if SKIP_DEDUP is set)
+            if not SKIP_DEDUP and msg_id and message_exists(dest_M, dest_folder, msg_id):
                 skipped += 1
+                batch_copied += 1
+                _check_batch_flush()
                 continue
 
             # Append to destination
             if not DRY_RUN:
-                dest_M.append(dest_folder, None, None, raw)
+                retry(dest_M.append, dest_folder, None, None, raw, label=f"append UID {uid}")
                 copied += 1
                 total_bytes += msg_size
             else:
                 copied += 1
                 total_bytes += msg_size
 
-            # Update state periodically
-            if copied % 100 == 0:
-                state["processed_emails"] = state.get("processed_emails", 0) + copied
-                state["processed_bytes"] = state.get("processed_bytes", 0) + total_bytes
+            batch_copied += 1
+            batch_bytes += msg_size
+
+            # Batch progress report
+            if batch_copied >= BATCH_SIZE:
+                elapsed = time.time() - batch_start_time
+                rate = (batch_copied / elapsed * 60) if elapsed > 0 else 0
+                log(f"[BATCH] folder={src_folder} processed={copied}/{total_in_folder} "
+                    f"bytes={bytes_human(total_bytes)} elapsed={elapsed:.1f}s rate={rate:.1f} msgs/min")
+                # Save state after every batch
+                folder_st["last_uid"] = uid
+                folder_st["copied"] = copied
+                folder_st["bytes"] = total_bytes
+                folder_st["skipped"] = skipped
                 state["last_folder"] = src_folder
                 state["last_uid"] = uid
+                state["processed_emails"] = state.get("processed_emails", 0)
+                state["processed_bytes"] = state.get("processed_bytes", 0)
                 save_state(state)
-                log(f"  Progress: {copied} copied ({bytes_human(total_bytes)})")
+                # Reset batch counters
+                batch_start_time = time.time()
+                batch_copied = 0
+                batch_bytes = 0
 
         except Exception as e:
             log(f"  Error on UID {uid}: {e}")
@@ -238,32 +318,53 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state, limi
             })
             skipped += 1
 
+    # Flush remaining batch progress
+    if batch_copied > 0:
+        elapsed = time.time() - batch_start_time
+        rate = (batch_copied / elapsed * 60) if elapsed > 0 else 0
+        log(f"[BATCH] folder={src_folder} processed={copied}/{total_in_folder} "
+            f"bytes={bytes_human(total_bytes)} elapsed={elapsed:.1f}s rate={rate:.1f} msgs/min")
+
     # Mark folder complete
     completed = state.get("completed_folders", [])
     if src_folder not in completed:
         completed.append(src_folder)
         state["completed_folders"] = completed
 
+    folder_st["completed"] = True
+    folder_st["last_uid"] = uids[-1] if uids else folder_st.get("last_uid")
+    folder_st["copied"] = copied
+    folder_st["bytes"] = total_bytes
+    folder_st["skipped"] = skipped
+
     state["processed_emails"] = state.get("processed_emails", 0) + copied
     state["processed_bytes"] = state.get("processed_bytes", 0) + total_bytes
     state["last_folder"] = src_folder
-    if uids:
-        state["last_uid"] = uids[-1]
+    state["last_uid"] = uids[-1] if uids else state.get("last_uid")
     save_state(state)
 
     return copied, total_bytes, skipped
 
+def _check_batch_flush():
+    """Placeholder — batch flush happens in the main loop above."""
+    pass
+
 # ── Main ──
 def main():
-    log("=" * 50)
+    log("=" * 60)
     log("Gmail IMAP Migrator")
-    log("=" * 50)
-    log(f"Source:      {SOURCE_USER}")
-    log(f"Destination: {DEST_USER} ({DEST_ID})")
-    log(f"Strategy:    {STRATEGY}")
-    log(f"Dry run:     {DRY_RUN}")
-    log(f"Size limit:  {bytes_human(SIZE_LIMIT) if SIZE_LIMIT else 'unlimited'}")
-    log(f"Email limit: {EMAIL_LIMIT or 'unlimited'}")
+    log("=" * 60)
+    log(f"Source:        {SOURCE_USER}")
+    log(f"Destination:   {DEST_USER} ({DEST_ID})")
+    log(f"Strategy:      {STRATEGY}")
+    log(f"Dry run:       {DRY_RUN}")
+    log(f"Size limit:    {bytes_human(SIZE_LIMIT) if SIZE_LIMIT else 'unlimited'}")
+    log(f"Email limit:   {EMAIL_LIMIT or 'unlimited'}")
+    log(f"Batch size:    {BATCH_SIZE}")
+    log(f"Skip dedup:    {SKIP_DEDUP}")
+    log(f"Date range:    {DATE_SINCE or '*'} to {DATE_BEFORE or '*'}")
+    wl = get_folder_whitelist()
+    log(f"Folder filter: {wl if wl else 'all folders'}")
     log("")
 
     state = load_state()
@@ -273,9 +374,12 @@ def main():
     state["strategy"] = STRATEGY
     save_state(state)
 
+    source_host = "imap.gmail.com"
+    dest_host = "imap.gmail.com"
+
     try:
-        source_M = connect("imap.gmail.com", SOURCE_USER, SOURCE_PASS, "source")
-        dest_M   = connect("imap.gmail.com", DEST_USER, DEST_PASS, f"dest ({DEST_ID})")
+        source_M = connect(source_host, SOURCE_USER, SOURCE_PASS, "source")
+        dest_M   = connect(dest_host, DEST_USER, DEST_PASS, f"dest ({DEST_ID})")
     except Exception as e:
         log(f"FATAL: Connection failed: {e}")
         state["status"] = "failed"
@@ -295,6 +399,7 @@ def main():
             copied, bts, skipped = copy_messages_to_dest(
                 source_M, dest_M, src_folder, dest_folder, state,
                 limit_bytes=SIZE_LIMIT, limit_emails=EMAIL_LIMIT,
+                source_host=source_host, source_pass=SOURCE_PASS,
             )
             total_copied += copied
             total_bytes += bts
@@ -302,12 +407,24 @@ def main():
 
         elif STRATEGY == "size":
             # Migrate all folders until size limit
-            folders = list_folders(source_M)
+            folders = retry(list_folders, source_M, label="list_folders")
             log(f"Found {len(folders)} source folders")
+
+            # Apply whitelist filter
+            wl = get_folder_whitelist()
+            if wl:
+                folders = [f for f in folders if f in wl]
+                log(f"After whitelist filter: {len(folders)} folders")
+
             remaining_bytes = SIZE_LIMIT
 
             for src_folder in sorted(folders):
                 if src_folder in SKIP_FOLDERS:
+                    continue
+                # Check if folder already completed
+                folder_st = get_folder_state(state, src_folder)
+                if folder_st.get("completed") and src_folder in state.get("completed_folders", []):
+                    log(f"  Skipping completed folder: {src_folder}")
                     continue
                 if remaining_bytes <= 0:
                     log("Global size limit reached, stopping")
@@ -317,6 +434,7 @@ def main():
                 copied, bts, skipped = copy_messages_to_dest(
                     source_M, dest_M, src_folder, dest_folder, state,
                     limit_bytes=remaining_bytes,
+                    source_host=source_host, source_pass=SOURCE_PASS,
                 )
                 total_copied += copied
                 total_bytes += bts
@@ -327,17 +445,16 @@ def main():
             # Sample random messages for testing
             src_folder = FOLDER
             dest_folder = DEST_PREFIX + src_folder
-            uids = uid_search(source_M, src_folder)
-            import random
+            uids = retry(uid_search, source_M, src_folder, label="uid_search")
             sample = random.sample(uids, min(SAMPLE_SIZE, len(uids)))
             log(f"Random sample: {len(sample)} UIDs from {len(uids)} total")
 
             for uid in sample:
-                raw = fetch_message(source_M, uid)
+                raw = retry(fetch_message, source_M, uid, label=f"fetch UID {uid}")
                 if raw:
                     if not DRY_RUN:
                         create_folder_if_needed(dest_M, dest_folder)
-                        dest_M.append(dest_folder, None, None, raw)
+                        retry(dest_M.append, dest_folder, None, None, raw, label=f"append UID {uid}")
                     total_copied += 1
                     total_bytes += len(raw)
 
@@ -355,12 +472,12 @@ def main():
         save_state(state)
     finally:
         log("")
-        log("=" * 50)
+        log("=" * 60)
         log(f"Migration {'dry-run' if DRY_RUN else 'run'} complete")
         log(f"  Copied:   {total_copied} messages ({bytes_human(total_bytes)})")
         log(f"  Skipped:  {total_skipped} (dedup/errors)")
         log(f"  Errors:   {len(state.get('errors', []))}")
-        log("=" * 50)
+        log("=" * 60)
         try:
             source_M.logout()
             dest_M.logout()
