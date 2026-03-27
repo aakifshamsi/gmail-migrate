@@ -19,12 +19,12 @@ on:
       size_limit_mb:
         description: 'Max MB to transfer per run (0 = unlimited)'
         required: false
-        default: '500'
+        default: '1'
         type: string
       email_limit:
         description: 'Max emails to migrate (0 = unlimited)'
         required: false
-        default: '0'
+        default: '1'
         type: string
       folder:
         description: 'Folder/label to migrate (folder strategy only)'
@@ -34,7 +34,7 @@ on:
       sample_size:
         description: 'Number of emails to sample (random strategy only)'
         required: false
-        default: '50'
+        default: '5'
         type: string
       dry_run:
         description: 'Dry run — report only, no writes'
@@ -64,7 +64,7 @@ on:
       batch_size:
         description: 'Messages per batch for progress reporting'
         required: false
-        default: '10'
+        default: '5'
         type: string
       destination:
         description: 'Target destination(s)'
@@ -78,15 +78,15 @@ on:
       delete_from_source:
         description: '[WARN] DELETE migrated mail from source after both destinations succeed'
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
   contents: write   # needed to commit state file
 
 env:
-  NTFY_MILESTONE_EMAILS: '500'
-  NTFY_MILESTONE_MB: '100'
+  NTFY_MILESTONE_EMAILS: '50'
+  NTFY_MILESTONE_MB: '10'
 
 jobs:
   # ─────────────────────────────────────────────
