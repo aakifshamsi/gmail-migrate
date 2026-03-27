@@ -5,12 +5,841 @@
   "strategy": "size",
   "processed_emails": 0,
   "processed_bytes": 0,
-  "last_uid": null,
-  "last_folder": null,
-  "status": "running",
+  "last_uid": "33",
+  "last_folder": "Cash Cafe",
+  "status": "completed",
   "started_at": "2026-03-27T16:42:32Z",
-  "updated_at": "2026-03-27T18:33:32.408796+00:00",
+  "updated_at": "2026-03-27T18:44:35.972392+00:00",
   "target_emails": 50,
   "target_bytes": 10485760,
-  "errors": []
+  "errors": [
+    {
+      "folder": "Cash Cafe",
+      "uid": "169",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.224093+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "168",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.257995+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "167",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.305862+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "165",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.359236+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "164",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.392811+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "163",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.425824+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "162",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.460075+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "161",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.490392+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "160",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.521551+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "159",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.551889+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "158",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.582702+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "157",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.613862+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "156",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.671605+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "155",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.704578+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "154",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.738644+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "153",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.782443+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "152",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.815470+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "151",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.866479+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "150",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.906170+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "149",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.950134+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "148",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:30.980679+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "147",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.020287+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "146",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.055194+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "145",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.085692+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "144",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.117395+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "143",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.146740+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "142",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.176829+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "141",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.205943+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "140",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.237411+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "139",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.269693+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "138",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.328981+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "137",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.357506+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "136",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.386942+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "135",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.420285+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "134",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.450536+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "133",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.486753+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "132",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.520481+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "131",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.548883+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "130",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.594278+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "129",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.623340+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "128",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.652825+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "127",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.687331+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "126",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.720525+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "125",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.752940+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "124",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.783572+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "123",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.813545+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "122",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.843828+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "121",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.887436+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "120",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.916522+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "119",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.944705+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "118",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:31.973538+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "117",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.005442+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "116",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.059474+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "115",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.090903+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "114",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.120540+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "113",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.149272+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "112",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.187203+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "111",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.232223+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "110",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.269174+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "109",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.327553+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "108",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.358429+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "107",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.387630+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "106",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.418677+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "105",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.449318+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "104",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.685247+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "103",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.790008+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "102",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.855928+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "101",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:32.950288+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "100",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.008647+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "99",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.062966+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "98",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.106608+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "97",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.255366+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "96",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.451088+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "95",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.539586+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "94",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.572739+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "93",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.706041+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "92",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.746198+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "91",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.778853+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "90",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.809123+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "89",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.841175+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "88",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.882704+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "87",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.912596+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "86",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.947031+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "85",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:33.977312+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "84",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.011199+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "83",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.043627+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "82",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.086153+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "81",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.118603+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "80",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.149475+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "79",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.182800+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "78",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.223275+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "77",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.254507+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "76",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.296787+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "75",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.330857+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "74",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.361664+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "73",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.391511+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "72",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.422117+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "71",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.451769+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "70",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.482170+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "69",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.546803+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "68",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.619027+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "67",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.760652+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "66",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.798627+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "65",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.831638+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "64",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.862032+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "63",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.896167+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "62",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.947749+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "61",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:34.977384+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "60",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.007771+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "59",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.049119+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "58",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.081258+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "57",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.113596+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "56",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.142537+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "55",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.172360+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "54",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.202898+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "53",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.233342+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "52",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.265549+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "51",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.296699+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "50",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.326359+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "49",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.359705+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "48",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.391177+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "47",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.422234+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "46",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.467290+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "45",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.497134+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "44",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.527198+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "43",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.559025+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "42",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.589634+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "41",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.619076+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "40",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.673776+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "39",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.703671+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "38",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.739237+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "37",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.770948+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "36",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.815118+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "35",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.896256+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "34",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.925969+00:00"
+    },
+    {
+      "folder": "Cash Cafe",
+      "uid": "33",
+      "error": "date_time not of a known type",
+      "timestamp": "2026-03-27T18:44:35.971467+00:00"
+    }
+  ],
+  "folder_state": {
+    "Cash Cafe": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 136,
+      "last_uid": "33",
+      "completed": true
+    }
+  },
+  "completed_folders": [
+    "Cash Cafe"
+  ]
 }
