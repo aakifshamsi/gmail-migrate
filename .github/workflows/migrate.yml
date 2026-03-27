@@ -128,22 +128,11 @@ jobs:
         with:
           token: ${{ secrets.GH_TOKEN }}
 
-      # ── Install imapsync via Docker (all Perl deps bundled) ──
-      - name: Install imapsync
+      # ── Install dependencies (pure Python, no imapsync needed) ──
+      - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y curl python3
-          docker pull gilleslamiral/imapsync:latest
-          # Create wrapper script
-          sudo tee /usr/local/bin/imapsync << 'WRAPPER'
-          #!/bin/bash
-          docker run --rm -i \
-            -e LANG -e LC_ALL \
-            -e http_proxy -e https_proxy \
-            gilleslamiral/imapsync "$@"
-          WRAPPER
-          sudo chmod +x /usr/local/bin/imapsync
-          imapsync --version
+          sudo apt-get install -y python3 numfmt
 
       # ── Make scripts executable ──
       - name: Prepare scripts
@@ -181,7 +170,7 @@ jobs:
       # ── Run migration ──
       - name: Run migration
         id: migration
-        run: scripts/migrate.sh
+        run: python3 scripts/migrate.py
         continue-on-error: true   # capture exit code; handle in next steps
 
       # ── Run test / dry-run report ──
@@ -311,17 +300,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y curl python3
-          # Install imapsync via Docker
-          docker pull gilleslamiral/imapsync:latest
-          sudo tee /usr/local/bin/imapsync << 'WRAPPER'
-          #!/bin/bash
-          docker run --rm -i \
-            -e LANG -e LC_ALL \
-            -e http_proxy -e https_proxy \
-            gilleslamiral/imapsync "$@"
-          WRAPPER
-          sudo chmod +x /usr/local/bin/imapsync
+          sudo apt-get install -y python3 numfmt
 
       # ── Verify both destinations have the mail ──
       - name: Verify destinations before deletion
@@ -403,33 +382,15 @@ jobs:
               sys.exit(1)
           PYEOF
 
-      # ── Dry-run deletion first ──
+      # ── Dry-run deletion preview ──
       - name: Dry-run deletion preview
         if: steps.verify.outcome == 'success'
         run: |
           echo ""
           echo "=== DRY-RUN: Preview of what would be deleted from source ==="
-          
-          imapsync \
-            --host1 "imap.gmail.com" --ssl1 --port1 993 \
-            --user1 "$GMAIL_DEST1_USER" --password1 "$GMAIL_DEST1_APP_PASS" \
-            --host2 "imap.gmail.com" --ssl2 --port2 993 \
-            --user2 "$GMAIL_SOURCE_USER" --password2 "$GMAIL_SOURCE_APP_PASS" \
-            --gmail1 --gmail2 \
-            --prefix1 "G-${GMAIL_SOURCE_USER}/" \
-            --prefix2 "" \
-            --delete2 \
-            --dry \
-            --exclude '\\[Gmail\\]/All Mail' \
-            --exclude '\\[Gmail\\]/Spam' \
-            --exclude '\\[Gmail\\]/Trash' \
-            --nofoldersizes \
-            --nofoldersizesatend \
-            --timeout 120 \
-            --logfile cleanup-dryrun.log 2>&1 | tail -30
-
+          CLEANUP_ACTION=dry-run python3 scripts/cleanup.py
           echo ""
-          echo "Review cleanup-dryrun.log for full details."
+          echo "Review above output for details."
 
       # ── Execute deletion from source ──
       - name: Delete migrated mail from source
@@ -437,43 +398,12 @@ jobs:
         if: steps.verify.outcome == 'success'
         run: |
           echo "=== Deleting migrated mail from source ==="
-          echo "[WARN]  This is PERMANENT. Messages will be moved to Trash then expunged."
+          echo "[WARN]  This is PERMANENT. Messages will be expunged."
+          CLEANUP_ACTION=delete python3 scripts/cleanup.py 2>&1 | tee cleanup-output.txt
           
-          imapsync \
-            --host1 "imap.gmail.com" --ssl1 --port1 993 \
-            --user1 "$GMAIL_DEST1_USER" --password1 "$GMAIL_DEST1_APP_PASS" \
-            --host2 "imap.gmail.com" --ssl2 --port2 993 \
-            --user2 "$GMAIL_SOURCE_USER" --password2 "$GMAIL_SOURCE_APP_PASS" \
-            --gmail1 --gmail2 \
-            --prefix1 "G-${GMAIL_SOURCE_USER}/" \
-            --prefix2 "" \
-            --delete2 \
-            --expunge2 \
-            --exclude '\\[Gmail\\]/All Mail' \
-            --exclude '\\[Gmail\\]/Spam' \
-            --exclude '\\[Gmail\\]/Trash' \
-            --nofoldersizes \
-            --nofoldersizesatend \
-            --maxsize 26214400 \
-            --sleep1 1 \
-            --sleep2 1 \
-            --timeout 120 \
-            --logfile cleanup-delete.log 2>&1 | tee cleanup-output.txt
-
-          # Calculate freed space
-          DELETED_COUNT=$(grep -c "^Msg " cleanup-delete.log 2>/dev/null || echo 0)
-          DELETED_BYTES=$(grep "^Msg " cleanup-delete.log 2>/dev/null | awk '{sum+=$6} END{print sum+0}')
-          DELETED_HR=$(numfmt --to=iec "$DELETED_BYTES" 2>/dev/null || echo "${DELETED_BYTES}B")
-
-          echo ""
-          echo "─────────────────────────────────────"
-          echo "Messages deleted from source: $DELETED_COUNT"
-          echo "Storage freed:                $DELETED_HR"
-          echo "─────────────────────────────────────"
-
+          DELETED_COUNT=$(grep -c "^    Deleted:" cleanup-output.txt 2>/dev/null || echo 0)
           echo "deleted_count=$DELETED_COUNT" >> "$GITHUB_OUTPUT"
-          echo "deleted_bytes=$DELETED_BYTES" >> "$GITHUB_OUTPUT"
-          echo "deleted_hr=$DELETED_HR" >> "$GITHUB_OUTPUT"
+          echo "Messages deleted from source: $DELETED_COUNT"
 
       # ── Notify cleanup complete ──
       - name: Send cleanup notification
@@ -482,20 +412,19 @@ jobs:
           chmod +x scripts/notify.sh
           
           DELETED_COUNT="${{ steps.delete.outputs.deleted_count || '0' }}"
-          DELETED_HR="${{ steps.delete.outputs.deleted_hr || '0B' }}"
           STATUS="${{ steps.delete.outcome }}"
           
           if [ "$STATUS" = "success" ]; then
             bash scripts/notify.sh \
               "cleanup" \
               "Source Cleanup Complete" \
-              "Messages deleted from source: ${DELETED_COUNT}, Storage freed: ${DELETED_HR}, Source: aakifshamsi@gmail.com, Both destinations verified [OK]" \
+              "Messages deleted from source: ${DELETED_COUNT}. Source: aakifshamsi@gmail.com. Both destinations verified [OK]." \
               "high"
           else
             bash scripts/notify.sh \
               "error" \
               "[FAIL] Source Cleanup Failed" \
-              "Deletion from source encountered errors. Check: ${STATUS}, Messages deleted before error: ${DELETED_HR}" \
+              "Deletion from source encountered errors. Check: ${STATUS}. Messages deleted: ${DELETED_COUNT}." \
               "urgent"
           fi
 
