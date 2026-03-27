@@ -48,20 +48,33 @@ permissions:
   contents: read
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+    steps:
+      - name: Build destination matrix
+        id: build-matrix
+        run: |
+          DEST="${{ inputs.destination }}"
+          case "$DEST" in
+            dest1)
+              echo 'matrix={"include":[{"id":"dest1","user_secret":"GMAIL_DEST1_USER","pass_secret":"GMAIL_DEST1_APP_PASS","state_file":"migration-state-dest1.json"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            dest2)
+              echo 'matrix={"include":[{"id":"dest2","user_secret":"GMAIL_DEST2_USER","pass_secret":"GMAIL_DEST2_APP_PASS","state_file":"migration-state-dest2.json"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo 'matrix={"include":[{"id":"dest1","user_secret":"GMAIL_DEST1_USER","pass_secret":"GMAIL_DEST1_APP_PASS","state_file":"migration-state-dest1.json"},{"id":"dest2","user_secret":"GMAIL_DEST2_USER","pass_secret":"GMAIL_DEST2_APP_PASS","state_file":"migration-state-dest2.json"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
   test:
+    needs: setup
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - id: dest1
-            user_secret: GMAIL_DEST1_USER
-            pass_secret: GMAIL_DEST1_APP_PASS
-            state_file: migration-state-dest1.json
-          - id: dest2
-            user_secret: GMAIL_DEST2_USER
-            pass_secret: GMAIL_DEST2_APP_PASS
-            state_file: migration-state-dest2.json
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     env:
       DEST_ID:            ${{ matrix.id }}
@@ -76,11 +89,6 @@ jobs:
       MIGRATION_FOLDER:   ${{ inputs.folder }}
       SAMPLE_SIZE:        ${{ inputs.sample_size }}
       DRY_RUN:            'true'
-
-    # Skip matrix entry if destination not selected
-    if: |
-      inputs.destination == 'both' ||
-      inputs.destination == matrix.id
 
     steps:
       - name: Mask secrets
@@ -101,6 +109,36 @@ jobs:
 
       - name: Prepare scripts
         run: chmod +x scripts/*.sh
+
+      # ── Connection test ──
+      - name: Connection test
+        run: |
+          echo "Testing source IMAP connection..."
+          python3 - << 'EOF'
+          import imaplib, os, sys
+          try:
+              M = imaplib.IMAP4_SSL('imap.gmail.com')
+              M.login(os.environ['GMAIL_SOURCE_USER'], os.environ['GMAIL_SOURCE_APP_PASS'])
+              _, folders = M.list()
+              print(f"✅ Source connected. {len(folders)} folders found.")
+              M.logout()
+          except Exception as e:
+              print(f"❌ Source connection failed: {e}")
+              sys.exit(1)
+          EOF
+
+          echo "Testing destination IMAP connection..."
+          python3 - << 'EOF'
+          import imaplib, os, sys
+          try:
+              M = imaplib.IMAP4_SSL('imap.gmail.com')
+              M.login(os.environ['GMAIL_DEST_USER'], os.environ['GMAIL_DEST_APP_PASS'])
+              print(f"✅ Destination {os.environ['DEST_ID']} connected.")
+              M.logout()
+          except Exception as e:
+              print(f"❌ Destination connection failed: {e}")
+              sys.exit(1)
+          EOF
 
       # ── Strategy: size (dry-run) ──
       - name: Dry-run — Size strategy
@@ -138,7 +176,7 @@ jobs:
         run: |
           echo "## Integrity Check — $DEST_ID" | tee -a integrity-report.txt
           echo "" | tee -a integrity-report.txt
-          
+
           for FOLDER in "INBOX" "[Gmail]/Sent Mail" "[Gmail]/Starred"; do
             DEST_FOLDER="G-${GMAIL_SOURCE_USER}/${FOLDER}"
             python3 - <<EOF >> integrity-report.txt
@@ -169,38 +207,8 @@ jobs:
           print(f"  ${FOLDER}: src={src}  dest={dst}  [{status}]")
           EOF
           done
-          
+
           cat integrity-report.txt
-
-      # ── Connection test ──
-      - name: Connection test
-        run: |
-          echo "Testing source IMAP connection..."
-          python3 - << 'EOF'
-          import imaplib, os, sys
-          try:
-              M = imaplib.IMAP4_SSL('imap.gmail.com')
-              M.login(os.environ['GMAIL_SOURCE_USER'], os.environ['GMAIL_SOURCE_APP_PASS'])
-              _, folders = M.list()
-              print(f"✅ Source connected. {len(folders)} folders found.")
-              M.logout()
-          except Exception as e:
-              print(f"❌ Source connection failed: {e}")
-              sys.exit(1)
-          EOF
-
-          echo "Testing destination IMAP connection..."
-          python3 - << 'EOF'
-          import imaplib, os, sys
-          try:
-              M = imaplib.IMAP4_SSL('imap.gmail.com')
-              M.login(os.environ['GMAIL_DEST_USER'], os.environ['GMAIL_DEST_APP_PASS'])
-              print(f"✅ Destination {os.environ['DEST_ID']} connected.")
-              M.logout()
-          except Exception as e:
-              print(f"❌ Destination connection failed: {e}")
-              sys.exit(1)
-          EOF
 
       # ── Job summary ──
       - name: Write test summary
