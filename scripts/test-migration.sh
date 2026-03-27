@@ -55,7 +55,7 @@ fi
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 log()    { echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$REPORT_FILE"; }
-header() { echo "" | tee -a "$REPORT_FILE"; echo "══════════════════════════════════════" | tee -a "$REPORT_FILE"; log "$*"; echo "══════════════════════════════════════" | tee -a "$REPORT_FILE"; }
+header() { echo "" | tee -a "$REPORT_FILE"; echo "======================================" | tee -a "$REPORT_FILE"; log "$*"; echo "======================================" | tee -a "$REPORT_FILE"; }
 
 bytes_human() { numfmt --to=iec "${1:-0}" 2>/dev/null || echo "${1:-0}B"; }
 
@@ -75,14 +75,14 @@ try:
     M.login(user, password)
     _, folders = M.list()
     folder_count = len(folders) if folders else 0
-    print(f"  ✅ {label}: connected ({folder_count} folders)")
+    print(f"  [OK] {label}: connected ({folder_count} folders)")
     M.logout()
     sys.exit(0)
 except imaplib.IMAP4.error as e:
-    print(f"  ❌ {label}: IMAP error — {e}")
+    print(f"  [FAIL] {label}: IMAP error — {e}")
     sys.exit(1)
 except Exception as e:
-    print(f"  ❌ {label}: Connection failed — {e}")
+    print(f"  [FAIL] {label}: Connection failed — {e}")
     sys.exit(1)
 EOF
 }
@@ -141,7 +141,7 @@ run_size_test() {
     log "Would migrate approx:        ${pct}% of total"
   fi
   log ""
-  log "⚠️  DRY RUN — no messages written to destination."
+  log "[WARN]  DRY RUN — no messages written to destination."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ run_folder_test() {
   log "  Estimated bytes:      $(bytes_human "${total_bytes:-0}")"
   log "  Errors:               ${err_count}"
   log ""
-  log "⚠️  DRY RUN — no messages written to destination."
+  log "[WARN]  DRY RUN — no messages written to destination."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ EOF
   log "  Source folder:        ${FOLDER}"
   log "  Destination folder:   G-${GMAIL_SOURCE_USER}/${FOLDER}"
   log ""
-  log "⚠️  DRY RUN — no messages written to destination."
+  log "[WARN]  DRY RUN — no messages written to destination."
 
   # Verify header integrity for sampled messages
   log ""
@@ -336,17 +336,17 @@ for folder, src_count in sorted(src_folders.items()):
         continue
     dst_count = dst_remap.get(folder, "MISSING")
     if dst_count == "MISSING":
-        status = "⚠️  NOT MIGRATED"
+        status = "[WARN]  NOT MIGRATED"
         all_match = False
     elif isinstance(src_count, int) and isinstance(dst_count, int):
         delta = src_count - dst_count
         if delta == 0:
-            status = "✅ MATCH"
+            status = "[OK] MATCH"
         elif delta > 0:
-            status = f"⚠️  DELTA: -{delta}"
+            status = f"[WARN]  DELTA: -{delta}"
             all_match = False
         else:
-            status = f"⚠️  EXTRA: +{abs(delta)}"
+            status = f"[WARN]  EXTRA: +{abs(delta)}"
     else:
         status = f"ERR src={src_count}"
         all_match = False
@@ -355,9 +355,9 @@ for folder, src_count in sorted(src_folders.items()):
 
 print()
 if all_match:
-    print("  ✅ All folders match.")
+    print("  [OK] All folders match.")
 else:
-    print("  ⚠️  Some folders have deltas — additional migration runs needed.")
+    print("  [WARN]  Some folders have deltas — additional migration runs needed.")
     sys.exit(1)
 EOF
 }

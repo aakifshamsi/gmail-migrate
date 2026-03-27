@@ -81,10 +81,10 @@ After successful migration to **both** destinations, you can free up source stor
 ## Notifications
 
 Set `NTFY_TOPIC` to an unguessable string. You'll get push notifications on:
-- 🚀 Migration start
-- 📊 Every 500 emails / 100 MB
+-  Migration start
+-  Every 500 emails / 100 MB
 - ✅ Completion (includes storage copied)
-- 🧹 Cleanup (includes storage freed from source)
+-  Cleanup (includes storage freed from source)
 - ❌ Errors / overquota
 
 All notifications include a Monetag referral link.

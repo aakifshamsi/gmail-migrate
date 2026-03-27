@@ -198,7 +198,7 @@ notify() {
 
 notify_start() {
   notify "start" \
-    "📬 Gmail Migration Started" \
+    "[START] Gmail Migration Started" \
     "Strategy: ${STRATEGY}
 Source: ${SOURCE_REDACTED}
 Destination: ${DEST_ID} (${DEST_REDACTED})
@@ -212,7 +212,7 @@ Run: #${GITHUB_RUN_NUMBER:-local}" \
 notify_milestone() {
   local emails="$1" bytes="$2" folder="$3"
   notify "milestone" \
-    "📊 Migration Milestone — ${DEST_ID}" \
+    "[STATS] Migration Milestone — ${DEST_ID}" \
     "Emails so far: ${emails}
 Bytes transferred: $(bytes_human "$bytes")
 Current folder: ${folder}
@@ -225,7 +225,7 @@ notify_complete() {
   local freed_hr
   freed_hr=$(bytes_human "$bytes")
   notify "complete" \
-    "✅ Migration Complete — ${DEST_ID}" \
+    "[OK] Migration Complete — ${DEST_ID}" \
     "Emails migrated: ${emails}
 Data copied: ${freed_hr}
 Errors: ${errors}
@@ -239,7 +239,7 @@ Storage will be freed from source after cleanup job." \
 notify_error() {
   local msg="$1" exit_code="${2:-1}"
   notify "error" \
-    "❌ Migration Error — ${DEST_ID}" \
+    "[FAIL] Migration Error — ${DEST_ID}" \
     "Error: ${msg}
 Exit code: ${exit_code}
 Emails before error: $(get_emails_migrated)
@@ -461,7 +461,7 @@ main() {
     if grep -q "OVERQUOTA" "$LOGFILE"; then
       log "WARNING: Gmail OVERQUOTA detected."
       notify "overquota" \
-        "⚠️ Gmail OVERQUOTA — ${DEST_ID}" \
+        "[WARN] Gmail OVERQUOTA — ${DEST_ID}" \
         "Gmail rate limit hit. Migration paused at ${EMAILS_MIGRATED} emails. Resume tomorrow." \
         "high"
     fi

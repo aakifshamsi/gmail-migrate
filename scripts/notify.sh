@@ -37,7 +37,6 @@ NTFY_MARKDOWN="${NTFY_MARKDOWN:-false}"
 DEST_ID="${DEST_ID:-}"
 
 # Monetag referral link — included in all notifications
-MONETAG_LINK="https://omg10.com/4/10762909"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Guards
@@ -105,21 +104,18 @@ build_tags() {
 TAGS=$(build_tags | tr -d '\n')
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Build full body — append monetag link + log URL for errors
 # ─────────────────────────────────────────────────────────────────────────────
 FULL_BODY="$BODY"
 
-# Always append monetag link
 FULL_BODY="${FULL_BODY}
 
-💰 ${MONETAG_LINK}"
 
 # Append log URL for error events
 if [[ "$EVENT" == "error" || "$EVENT" == "overquota" ]]; then
   if [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
     LOG_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
     FULL_BODY="${FULL_BODY}
-📋 Logs: ${LOG_URL}"
+ Logs: ${LOG_URL}"
   fi
 fi
 

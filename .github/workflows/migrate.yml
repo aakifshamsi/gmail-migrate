@@ -51,7 +51,7 @@ on:
           - dest1
           - dest2
       delete_from_source:
-        description: '⚠️ DELETE migrated mail from source after both destinations succeed'
+        description: '[WARN] DELETE migrated mail from source after both destinations succeed'
         required: false
         default: false
         type: boolean
@@ -228,8 +228,8 @@ jobs:
           | Outcome | $STATUS |
           | Run number | #${{ github.run_number }} |
 
-          $([ "$DRY_RUN" = "true" ] && echo "> ⚠️ **DRY RUN** — no messages were written to destination.")
-          $([ "$STATUS" != "success" ] && echo "> ❌ **Migration encountered errors.** Check logs above.")
+          $([ "$DRY_RUN" = "true" ] && echo "> [WARN] **DRY RUN** — no messages were written to destination.")
+          $([ "$STATUS" != "success" ] && echo "> [FAIL] **Migration encountered errors.** Check logs above.")
           EOF
 
       # ── Upload migration log and state as artifact ──
@@ -384,17 +384,17 @@ jobs:
               d1_count = d1r.get(folder, 0)
               d2_count = d2r.get(folder, 0)
               if d1_count >= src_count and d2_count >= src_count:
-                  status = "✅"
+                  status = "[OK]"
               else:
-                  status = "⚠️ NO"
+                  status = "[WARN] NO"
                   safe_to_delete = False
               print(f"{folder:<40} {src_count:>6} {d1_count:>6} {d2_count:>6} {status}")
 
           print()
           if safe_to_delete:
-              print("✅ Both destinations have all mail. Safe to delete from source.")
+              print("[OK] Both destinations have all mail. Safe to delete from source.")
           else:
-              print("⚠️ NOT safe to delete — some folders have deltas. Run more migrations first.")
+              print("[WARN] NOT safe to delete — some folders have deltas. Run more migrations first.")
               sys.exit(1)
           PYEOF
 
@@ -403,7 +403,7 @@ jobs:
         if: steps.verify.outcome == 'success'
         run: |
           echo ""
-          echo "═══ DRY-RUN: Preview of what would be deleted from source ═══"
+          echo "=== DRY-RUN: Preview of what would be deleted from source ==="
           
           imapsync \
             --host1 "imap.gmail.com" --ssl1 --port1 993 \
@@ -431,8 +431,8 @@ jobs:
         id: delete
         if: steps.verify.outcome == 'success'
         run: |
-          echo "═══ Deleting migrated mail from source ═══"
-          echo "⚠️  This is PERMANENT. Messages will be moved to Trash then expunged."
+          echo "=== Deleting migrated mail from source ==="
+          echo "[WARN]  This is PERMANENT. Messages will be moved to Trash then expunged."
           
           imapsync \
             --host1 "imap.gmail.com" --ssl1 --port1 993 \
@@ -483,23 +483,21 @@ jobs:
           if [ "$STATUS" = "success" ]; then
             bash scripts/notify.sh \
               "cleanup" \
-              "🧹 Source Cleanup Complete" \
+              " Source Cleanup Complete" \
               "Messages deleted from source: ${DELETED_COUNT}
 Storage freed: ${DELETED_HR}
 Source: aakifshamsi@gmail.com
-Both destinations verified ✅
+Both destinations verified [OK]
 
-💰 Support us: https://omg10.com/4/10762909" \
               "high"
           else
             bash scripts/notify.sh \
               "error" \
-              "❌ Source Cleanup Failed" \
+              "[FAIL] Source Cleanup Failed" \
               "Deletion from source encountered errors.
 Check: ${{ steps.delete.outcome }}
 Messages deleted before error: ${DELETED_HR}
 
-💰 Support us: https://omg10.com/4/10762909" \
               "urgent"
           fi
 

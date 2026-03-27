@@ -135,10 +135,10 @@ jobs:
               M = imaplib.IMAP4_SSL('imap.gmail.com')
               M.login(os.environ['GMAIL_SOURCE_USER'], os.environ['GMAIL_SOURCE_APP_PASS'])
               _, folders = M.list()
-              print(f"✅ Source connected. {len(folders)} folders found.")
+              print(f"[OK] Source connected. {len(folders)} folders found.")
               M.logout()
           except Exception as e:
-              print(f"❌ Source connection failed: {e}")
+              print(f"[FAIL] Source connection failed: {e}")
               sys.exit(1)
           EOF
 
@@ -148,10 +148,10 @@ jobs:
           try:
               M = imaplib.IMAP4_SSL('imap.gmail.com')
               M.login(os.environ['GMAIL_DEST_USER'], os.environ['GMAIL_DEST_APP_PASS'])
-              print(f"✅ Destination {os.environ['DEST_ID']} connected.")
+              print(f"[OK] Destination {os.environ['DEST_ID']} connected.")
               M.logout()
           except Exception as e:
-              print(f"❌ Destination connection failed: {e}")
+              print(f"[FAIL] Destination connection failed: {e}")
               sys.exit(1)
           EOF
 
