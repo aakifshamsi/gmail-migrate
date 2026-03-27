@@ -132,7 +132,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3 numfmt
+          # python3 is pre-installed; numfmt is in coreutils (pre-installed)
 
       # ── Make scripts executable ──
       - name: Prepare scripts
@@ -300,7 +300,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3 numfmt
+          sudo apt-get install -y python3
 
       # ── Verify both destinations have the mail ──
       - name: Verify destinations before deletion
