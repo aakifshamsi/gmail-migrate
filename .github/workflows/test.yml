@@ -104,14 +104,6 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y curl python3
-          # Use official Gilles Lamiral install script
-          # This handles ALL Perl dependencies and imapsync installation
-          curl -L https://imapsync.lamiral.info/install/install_imapsync -o /tmp/install_imapsync
-          chmod +x /tmp/install_imapsync
-          echo "=== Running official imapsync installer ==="
-          sudo /tmp/install_imapsync 2>&1 || true
-          # Verify
-          imapsync --version || echo "imapsync installed"
 
       - name: Prepare scripts
         run: chmod +x scripts/*.sh

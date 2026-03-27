@@ -128,16 +128,22 @@ jobs:
         with:
           token: ${{ secrets.GH_TOKEN }}
 
-      # ── Install imapsync ──
+      # ── Install imapsync via Docker (all Perl deps bundled) ──
       - name: Install imapsync
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y curl python3
-          # Use official Gilles Lamiral install script (handles ALL Perl deps)
-          curl -L https://imapsync.lamiral.info/install/install_imapsync -o /tmp/install_imapsync
-          chmod +x /tmp/install_imapsync
-          sudo /tmp/install_imapsync 2>&1 || true
-          imapsync --version || echo "imapsync installed"
+          docker pull gilleslamiral/imapsync:latest
+          # Create wrapper script
+          sudo tee /usr/local/bin/imapsync << 'WRAPPER'
+          #!/bin/bash
+          docker run --rm -i \
+            -e LANG -e LC_ALL \
+            -e http_proxy -e https_proxy \
+            gilleslamiral/imapsync "$@"
+          WRAPPER
+          sudo chmod +x /usr/local/bin/imapsync
+          imapsync --version
 
       # ── Make scripts executable ──
       - name: Prepare scripts
@@ -305,7 +311,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y imapsync curl python3 numfmt
+          sudo apt-get install -y curl python3
+          # Install imapsync via Docker
+          docker pull gilleslamiral/imapsync:latest
+          sudo tee /usr/local/bin/imapsync << 'WRAPPER'
+          #!/bin/bash
+          docker run --rm -i \
+            -e LANG -e LC_ALL \
+            -e http_proxy -e https_proxy \
+            gilleslamiral/imapsync "$@"
+          WRAPPER
+          sudo chmod +x /usr/local/bin/imapsync
 
       # ── Verify both destinations have the mail ──
       - name: Verify destinations before deletion
