@@ -1,59 +1,57 @@
 #!/usr/bin/env python3
 """
-Gmail IMAP Migrator — pure Python, no imapsync dependency.
+Gmail API Migrator — uses Cloudflare Worker as token authority.
 
-Copies mail from source Gmail to destination Gmail(s) via IMAP.
-Resumes from last run via state file. Supports size/email limits.
+No app passwords needed. Gets fresh OAuth tokens from the CF Worker's
+/api/token endpoint, then uses Gmail API for all operations.
 
-Features:
-  - Batch processing with progress reporting
-  - Skip dedup mode (SKIP_DEDUP=true) for first runs
-  - Date range filtering (DATE_SINCE / DATE_BEFORE, DD-Mon-YYYY)
-  - Folder whitelist (FOLDER_WHITELIST)
-  - Resumability with per-folder last UID tracking
-  - Connection retry with exponential backoff
+Usage (env vars):
+  WORKER_URL        — CF Worker URL (e.g. https://gmail-migrator.aakif-share.workers.dev)
+  WORKER_AUTH_TOKEN — Auth token for CF Worker API
+  GMAIL_SOURCE_USER — Source email
+  GMAIL_DEST_USER   — Destination email
+  DEST_ID           — dest1 or dest2
+  STATE_FILE        — path to state JSON
+  STRATEGY          — size | folder | random
+  DRY_RUN           — true | false
+  SIZE_LIMIT_MB     — max MB per run
+  EMAIL_LIMIT       — max emails per run (0=unlimited)
+  BATCH_SIZE        — messages per batch (default 10)
+  MIGRATION_FOLDER  — folder for folder/random strategy
+  SKIP_DEDUP        — true to skip Message-ID dedup
 """
-import imaplib
-import email
+import json
 import os
 import sys
-import json
 import time
-import hashlib
-import re
-import random
+import email
+import base64
+import urllib.request
+import urllib.error
+import ssl
 from datetime import datetime, timezone
 
-# ── Config from environment ──
-SOURCE_USER = os.environ["GMAIL_SOURCE_USER"]
-SOURCE_PASS = os.environ["GMAIL_SOURCE_APP_PASS"]
-DEST_USER   = os.environ["GMAIL_DEST_USER"]
-DEST_PASS   = os.environ["GMAIL_DEST_APP_PASS"]
-DEST_ID     = os.environ.get("DEST_ID", "dest")
-STATE_FILE  = os.environ.get("STATE_FILE", f"migration-state-{DEST_ID}.json")
-STRATEGY    = os.environ.get("STRATEGY", "size")
-DRY_RUN     = os.environ.get("DRY_RUN", "true").lower() == "true"
-SIZE_LIMIT  = int(os.environ.get("SIZE_LIMIT_MB", "500")) * 1024 * 1024
-EMAIL_LIMIT = int(os.environ.get("EMAIL_LIMIT", "0"))
-FOLDER      = os.environ.get("MIGRATION_FOLDER", "INBOX")
-SAMPLE_SIZE = int(os.environ.get("SAMPLE_SIZE", "50"))
-LOG_FILE    = "migration.log"
+# ── Config ──
+WORKER_URL      = os.environ["WORKER_URL"].rstrip("/")
+WORKER_TOKEN    = os.environ["WORKER_AUTH_TOKEN"]
+SOURCE_USER     = os.environ["GMAIL_SOURCE_USER"]
+DEST_USER       = os.environ["GMAIL_DEST_USER"]
+DEST_ID         = os.environ.get("DEST_ID", "dest")
+STATE_FILE      = os.environ.get("STATE_FILE", f"migration-state-{DEST_ID}.json")
+STRATEGY        = os.environ.get("STRATEGY", "size")
+DRY_RUN         = os.environ.get("DRY_RUN", "true").lower() == "true"
+SIZE_LIMIT      = int(os.environ.get("SIZE_LIMIT_MB", "500")) * 1024 * 1024
+EMAIL_LIMIT     = int(os.environ.get("EMAIL_LIMIT", "0"))
+BATCH_SIZE      = int(os.environ.get("BATCH_SIZE", "10"))
+FOLDER          = os.environ.get("MIGRATION_FOLDER", "INBOX")
+SKIP_DEDUP      = os.environ.get("SKIP_DEDUP", "false").lower() == "true"
+SAMPLE_SIZE     = int(os.environ.get("SAMPLE_SIZE", "50"))
+LOG_FILE        = "migration.log"
 
-# New config
-BATCH_SIZE       = int(os.environ.get("BATCH_SIZE", "10"))
-SKIP_DEDUP       = os.environ.get("SKIP_DEDUP", "false").lower() == "true"
-DATE_SINCE       = os.environ.get("DATE_SINCE", "")
-DATE_BEFORE      = os.environ.get("DATE_BEFORE", "")
-FOLDER_WHITELIST = os.environ.get("FOLDER_WHITELIST", "")
+GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 
-DEST_PREFIX = f"G-{SOURCE_USER}/"
-
-# Folders to skip
-SKIP_FOLDERS = {"[Gmail]/All Mail", "[Gmail]/Spam", "[Gmail]/Trash"}
-
-# Retry config
-MAX_RETRIES = 3
-RETRY_BASE_DELAY = 2  # seconds
+# Token cache (per-invocation)
+_token_cache = {}
 
 # ── Helpers ──
 def log(msg):
@@ -70,13 +68,207 @@ def bytes_human(n):
         n /= 1024
     return f"{n:.1f}TB"
 
+# ── Token Management (via CF Worker) ──
+def get_token(email_addr):
+    """Get fresh access token from CF Worker. Cached per-invocation."""
+    if email_addr in _token_cache:
+        return _token_cache[email_addr]
+
+    url = f"{WORKER_URL}/api/token?email={urllib.parse.quote(email_addr)}"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {WORKER_TOKEN}"})
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode() if e.fp else str(e)
+        log(f"FATAL: token fetch failed for {email_addr}: {e.code} {body}")
+        sys.exit(1)
+
+    token = data.get("access_token")
+    if not token:
+        log(f"FATAL: no token in response for {email_addr}: {data}")
+        sys.exit(1)
+
+    _token_cache[email_addr] = token
+    return token
+
+def get_source_token():
+    return get_token(SOURCE_USER)
+
+def get_dest_token():
+    return get_token(DEST_USER)
+
+# ── Gmail API ──
+def gmail_api(token, path, method="GET", body=None, content_type="application/json"):
+    """Call Gmail API. Returns parsed JSON or raw bytes."""
+    url = GMAIL_API + path
+    headers = {"Authorization": f"Bearer {token}"}
+
+    data = None
+    if body is not None:
+        if isinstance(body, str):
+            data = body.encode("utf-8")
+        elif isinstance(body, bytes):
+            data = body
+        else:
+            data = json.dumps(body).encode("utf-8")
+        if content_type:
+            headers["Content-Type"] = content_type
+
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                raw = resp.read()
+                # Try JSON parse
+                try:
+                    return json.loads(raw)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    return raw
+        except urllib.error.HTTPError as e:
+            if e.code == 401 and attempt < 2:
+                # Token expired — clear cache and retry
+                log(f"  401 on {path}, refreshing token (attempt {attempt+1})")
+                if token == get_source_token():
+                    _token_cache.pop(SOURCE_USER, None)
+                    token = get_source_token()
+                else:
+                    _token_cache.pop(DEST_USER, None)
+                    token = get_dest_token()
+                headers["Authorization"] = f"Bearer {token}"
+                req = urllib.request.Request(url, data=data, headers=headers, method=method)
+                continue
+            if e.code == 429 or e.code >= 500:
+                wait = 2 ** (attempt + 1)
+                log(f"  {e.code} on {path}, retry in {wait}s")
+                time.sleep(wait)
+                continue
+            body_text = e.read().decode() if e.fp else str(e)
+            raise RuntimeError(f"Gmail API {method} {path}: {e.code} {body_text[:300]}")
+        except (urllib.error.URLError, TimeoutError) as e:
+            if attempt < 2:
+                wait = 2 ** (attempt + 1)
+                log(f"  Connection error on {path}: {e}, retry in {wait}s")
+                time.sleep(wait)
+                continue
+            raise
+
+    raise RuntimeError(f"Gmail API {method} {path}: failed after 3 attempts")
+
+# ── Gmail Operations ──
+def list_labels(token):
+    """List all labels, returns {name: id} dict."""
+    data = gmail_api(token, "/labels")
+    result = {}
+    for label in data.get("labels", []):
+        result[label["name"]] = label["id"]
+    return result
+
+def list_messages(token, query="", max_results=500, page_token=None):
+    """
+    List messages matching a query. Returns list of {id, threadId}.
+    query uses Gmail search syntax: https://support.google.com/mail/answer/7190
+    """
+    path = f"/messages?maxResults={min(max_results, 500)}"
+    if query:
+        path += f"&q={urllib.parse.quote(query)}"
+    if page_token:
+        path += f"&pageToken={urllib.parse.quote(page_token)}"
+
+    data = gmail_api(token, path)
+    return data.get("messages", []), data.get("nextPageToken")
+
+def list_all_messages(token, query="", max_results=0):
+    """List all messages matching query, paginating automatically."""
+    all_msgs = []
+    page_token = None
+    while True:
+        msgs, page_token = list_messages(token, query=query, max_results=500, page_token=page_token)
+        if not msgs:
+            break
+        all_msgs.extend(msgs)
+        if max_results and len(all_msgs) >= max_results:
+            all_msgs = all_msgs[:max_results]
+            break
+        if not page_token:
+            break
+    return all_msgs
+
+def get_message_raw(token, msg_id):
+    """Get full message as raw RFC 2822 bytes."""
+    data = gmail_api(token, f"/messages/{msg_id}?format=raw")
+    if isinstance(data, dict):
+        raw_b64 = data.get("raw", "")
+        if raw_b64:
+            return base64.urlsafe_b64decode(raw_b64)
+    return None
+
+def get_message_metadata(token, msg_id):
+    """Get message metadata (headers, labelIds, sizeEstimate)."""
+    return gmail_api(token, f"/messages/{msg_id}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=Subject")
+
+def import_message(token, raw_bytes, label_ids=None):
+    """
+    Import a raw RFC 2822 message. This is the Gmail API equivalent of IMAP APPEND.
+    Returns the created message dict.
+    """
+    raw_b64 = base64.urlsafe_b64encode(raw_bytes).decode("ascii")
+    body = {"raw": raw_b64}
+    if label_ids:
+        body["labelIds"] = label_ids
+
+    return gmail_api(token, "/messages/import?neverMarkSpam=true", method="POST", body=body)
+
+def get_message_id_from_raw(raw_bytes):
+    """Extract Message-ID header from raw RFC 2822 bytes."""
+    try:
+        msg = email.message_from_bytes(raw_bytes)
+        return msg.get("Message-ID", "")
+    except Exception:
+        return ""
+
+def search_by_message_id(token, message_id):
+    """Search for a message by Message-ID header. Returns message ID or None."""
+    if not message_id:
+        return None
+    # Gmail search syntax: rfc822msgid:<message-id>
+    escaped = message_id.replace('"', '\\"')
+    msgs, _ = list_messages(token, query=f'rfc822msgid:{escaped}', max_results=1)
+    if msgs:
+        return msgs[0]["id"]
+    return None
+
+def create_label(token, name, labels_cache):
+    """Create a label if it doesn't exist. Returns label ID."""
+    if name in labels_cache:
+        return labels_cache[name]
+
+    try:
+        result = gmail_api(token, "/labels", method="POST", body={
+            "name": name,
+            "labelListVisibility": "labelShow",
+            "messageListVisibility": "show"
+        })
+        labels_cache[name] = result["id"]
+        return result["id"]
+    except RuntimeError as e:
+        if "409" in str(e) or "ALREADY_EXISTS" in str(e):
+            # Refresh labels cache
+            labels_cache.clear()
+            labels_cache.update(list_labels(token))
+            return labels_cache.get(name)
+        raise
+
+# ── State Management ──
 def load_state():
     try:
         with open(STATE_FILE) as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {
-            "schema_version": 2,
+            "schema_version": 3,
             "source_account": SOURCE_USER,
             "destination": DEST_ID,
             "strategy": STRATEGY,
@@ -84,7 +276,7 @@ def load_state():
             "processed_bytes": 0,
             "completed_folders": [],
             "last_folder": None,
-            "last_uid": None,
+            "last_msg_id": None,
             "folder_state": {},
             "status": "pending",
             "started_at": None,
@@ -97,159 +289,77 @@ def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
-def retry(func, *args, label="", max_retries=MAX_RETRIES, **kwargs):
-    """Call func with retry and exponential backoff. Reconnects on IMAP errors."""
-    last_exc = None
-    for attempt in range(1, max_retries + 1):
-        try:
-            return func(*args, **kwargs)
-        except (imaplib.IMAP4.error, imaplib.IMAP4.abort, OSError, ConnectionError) as e:
-            last_exc = e
-            delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))
-            log(f"  Retry {attempt}/{max_retries} for {label or func.__name__}: {e} (waiting {delay}s)")
-            time.sleep(delay)
-        except Exception as e:
-            raise
-    raise last_exc
-
-def connect(host, user, password, label=""):
-    log(f"Connecting to {label or user}...")
-    M = imaplib.IMAP4_SSL(host, 993)
-    M.login(user, password)
-    log(f"  Connected to {label or user}")
-    return M
-
-def reconnect(M, host, user, password, label=""):
-    """Reconnect a dropped IMAP connection."""
-    log(f"  Reconnecting {label or user}...")
-    try:
-        M.logout()
-    except Exception:
-        pass
-    return connect(host, user, password, label)
-
-def list_folders(M):
-    _, folders = M.list()
-    result = []
-    for f in (folders or []):
-        parts = f.decode().split(' "/" ')
-        if len(parts) >= 2:
-            name = parts[-1].strip().strip('"')
-            result.append(name)
-    return result
-
-def uid_search(M, folder, criteria="ALL"):
-    """Search UIDs in a folder. Returns list of UID strings."""
-    status, data = M.select(f'"{folder}"', readonly=True)
-    if status != "OK":
-        return []
-    status, data = M.uid("SEARCH", None, criteria)
-    if status != "OK" or not data[0]:
-        return []
-    return data[0].decode().split()
-
-def fetch_message(M, uid):
-    """Fetch full message by UID. Returns raw bytes or None."""
-    status, data = M.uid("FETCH", uid, "(RFC822)")
-    if status != "OK" or not data[0]:
-        return None
-    if isinstance(data[0], tuple):
-        return data[0][1]
-    return data[1]
-
-def message_exists(dest_M, dest_folder, message_id):
-    """Check if a message with this Message-ID already exists in destination."""
-    try:
-        status, data = dest_M.select(f'"{dest_folder}"', readonly=True)
-        if status != "OK":
-            return False
-        status, data = dest_M.uid("SEARCH", None, f'HEADER Message-ID "{message_id}"')
-        if status == "OK" and data[0] and data[0].decode().strip():
-            return True
-    except Exception:
-        pass
-    return False
-
-def create_folder_if_needed(M, folder):
-    """Create folder if it doesn't exist."""
-    try:
-        status, _ = M.select(f'"{folder}"', readonly=True)
-        if status == "OK":
-            return True
-    except Exception:
-        pass
-    try:
-        M.create(folder)
-        return True
-    except Exception as e:
-        if "ALREADYEXISTS" in str(e).upper() or "already exists" in str(e).lower():
-            return True
-        return False
-
-def build_search_criteria():
-    """Build IMAP SEARCH criteria string from env config."""
-    parts = ["ALL"]
-    if DATE_SINCE:
-        parts = [f'SINCE "{DATE_SINCE}"']
-        if DATE_BEFORE:
-            parts.append(f'BEFORE "{DATE_BEFORE}"')
-    return " ".join(parts)
-
-def get_folder_whitelist():
-    """Parse folder whitelist from env var."""
-    if not FOLDER_WHITELIST:
-        return None
-    return {f.strip() for f in FOLDER_WHITELIST.split(",") if f.strip()}
-
 def get_folder_state(state, folder):
-    """Get per-folder state dict."""
     fs = state.setdefault("folder_state", {})
-    return fs.setdefault(folder, {"copied": 0, "bytes": 0, "skipped": 0, "last_uid": None, "completed": False})
+    return fs.setdefault(folder, {"copied": 0, "bytes": 0, "skipped": 0, "last_msg_id": None, "completed": False})
 
-def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state,
-                           limit_bytes=0, limit_emails=0, source_host=SOURCE_USER, source_pass=SOURCE_PASS):
-    """Copy messages from source to destination folder with batch processing.
-    Returns (count, bytes, skipped).
+# ── Folder Mapping ──
+# Gmail API uses label names. Source labels map to destination labels with G- prefix.
+SKIP_LABELS = {"SPAM", "TRASH"}
+
+def gmail_query_for_folder(folder):
+    """Convert a folder/label name to a Gmail search query."""
+    if folder == "INBOX":
+        return "in:inbox"
+    elif folder == "SENT":
+        return "in:sent"
+    elif folder == "DRAFT":
+        return "in:draft"
+    elif folder == "STARRED":
+        return "in:starred"
+    elif folder.startswith("CATEGORY_"):
+        return f"in:{folder.replace('CATEGORY_', '').lower()}"
+    else:
+        # Custom label
+        return f'label:"{folder}"'
+
+def dest_label_name(src_label):
+    """Map source label to destination label with G- prefix."""
+    return f"G-{SOURCE_USER}/{src_label}"
+
+# ── Main Copy Logic ──
+def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_emails=0):
+    """
+    Copy messages from source folder/label to destination with G- prefix.
+    Returns (copied, bytes, skipped).
     """
     folder_st = get_folder_state(state, src_folder)
+    dest_label = dest_label_name(src_folder)
 
-    if src_folder not in state.get("completed_folders", []):
-        create_folder_if_needed(dest_M, dest_folder)
+    # Ensure destination label exists
+    dst_labels = {}
+    try:
+        dst_labels = list_labels(dst_token)
+        create_label(dst_token, dest_label, dst_labels)
+    except Exception as e:
+        log(f"  Warning: couldn't create dest label {dest_label}: {e}")
 
-    criteria = build_search_criteria()
-    uids = retry(uid_search, source_M, src_folder, criteria, label="uid_search")
-    if not uids:
-        log(f"  {src_folder}: no messages (criteria: {criteria})")
+    # List messages in source folder
+    query = gmail_query_for_folder(src_folder)
+    log(f"  Query: {query}")
+
+    messages = list_all_messages(src_token, query=query)
+    total_in_folder = len(messages)
+    log(f"  {src_folder}: {total_in_folder} messages (batch_size={BATCH_SIZE})")
+
+    if not messages:
         return 0, 0, 0
-
-    total_in_folder = len(uids)
-
-    # Process newest-first so small limits hit immediately
-    uids = list(reversed(uids))
-
-    log(f"  {src_folder}: {total_in_folder} messages found, processing newest-first (batch_size={BATCH_SIZE})")
 
     copied = 0
     total_bytes = 0
     skipped = 0
-    last_uid = folder_st.get("last_uid")
-    resume = False
+    last_msg_id = folder_st.get("last_msg_id")
+    resume = last_msg_id is not None
 
-    # Resume: skip UIDs up to and including last_uid
-    if last_uid:
-        resume = True
-        log(f"  Resuming from after UID {last_uid}")
-
-    batch_start_time = time.time()
+    batch_start = time.time()
     batch_copied = 0
-    batch_bytes = 0
 
-    # If skip_dedup and small email limit, we can stop after limit is reached
-    effective_limit = limit_emails if limit_emails else 0
+    for msg_ref in messages:
+        msg_id = msg_ref["id"]
 
-    for uid in uids:
+        # Resume: skip until we pass last_msg_id
         if resume:
-            if uid == last_uid:
+            if msg_id == last_msg_id:
                 resume = False
             continue
 
@@ -262,76 +372,71 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state,
             break
 
         try:
-            raw = retry(fetch_message, source_M, uid, label=f"fetch UID {uid}")
+            # Get raw message from source
+            raw = get_message_raw(src_token, msg_id)
             if raw is None:
                 skipped += 1
-                batch_copied += 1  # count toward batch for progress
-                _check_batch_flush()
+                batch_copied += 1
                 continue
 
             msg_size = len(raw)
 
-            # Parse Message-ID for dedup
-            msg = email.message_from_bytes(raw)
-            msg_id = msg.get("Message-ID", "")
+            # Dedup check
+            if not SKIP_DEDUP:
+                msg_id_header = get_message_id_from_raw(raw)
+                if msg_id_header:
+                    existing = search_by_message_id(dst_token, msg_id_header)
+                    if existing:
+                        skipped += 1
+                        batch_copied += 1
+                        continue
 
-            # Dedup check (skip if SKIP_DEDUP is set)
-            if not SKIP_DEDUP and msg_id and message_exists(dest_M, dest_folder, msg_id):
-                skipped += 1
-                batch_copied += 1
-                _check_batch_flush()
-                continue
-
-            # Append to destination
+            # Import to destination
             if not DRY_RUN:
-                # Gmail APPEND requires FLAGS and a date — pass timestamp as float
-                retry(dest_M.append, dest_folder, '(\\Seen)', time.time(), raw, label=f"append UID {uid}")
-                copied += 1
-                total_bytes += msg_size
-            else:
-                copied += 1
-                total_bytes += msg_size
+                dest_label_ids = [dst_labels.get(dest_label)] if dest_label in dst_labels else []
+                import_message(dst_token, raw, label_ids=[lid for lid in dest_label_ids if lid])
 
+            copied += 1
+            total_bytes += msg_size
             batch_copied += 1
-            batch_bytes += msg_size
 
-            # Batch progress report
+            # Batch progress
             if batch_copied >= BATCH_SIZE:
-                elapsed = time.time() - batch_start_time
+                elapsed = time.time() - batch_start
                 rate = (batch_copied / elapsed * 60) if elapsed > 0 else 0
-                log(f"[BATCH] folder={src_folder} processed={copied}/{total_in_folder} "
-                    f"bytes={bytes_human(total_bytes)} elapsed={elapsed:.1f}s rate={rate:.1f} msgs/min")
-                # Save state after every batch
-                folder_st["last_uid"] = uid
+                log(f"[BATCH] folder={src_folder} done={copied}/{total_in_folder} "
+                    f"bytes={bytes_human(total_bytes)} {elapsed:.1f}s {rate:.1f} msg/min")
+
+                # Save state
+                folder_st["last_msg_id"] = msg_id
                 folder_st["copied"] = copied
                 folder_st["bytes"] = total_bytes
-                folder_st["skipped"] = skipped
                 state["last_folder"] = src_folder
-                state["last_uid"] = uid
-                state["processed_emails"] = state.get("processed_emails", 0)
-                state["processed_bytes"] = state.get("processed_bytes", 0)
+                state["last_msg_id"] = msg_id
                 save_state(state)
-                # Reset batch counters
-                batch_start_time = time.time()
-                batch_copied = 0
-                batch_bytes = 0
 
-        except Exception as e:
-            log(f"  Error on UID {uid}: {e}")
+                batch_start = time.time()
+                batch_copied = 0
+
+                # Small sleep to respect rate limits
+                time.sleep(0.5)
+
+        except RuntimeError as e:
+            log(f"  Error on msg {msg_id}: {e}")
             state.setdefault("errors", []).append({
                 "folder": src_folder,
-                "uid": uid,
-                "error": str(e),
+                "msg_id": msg_id,
+                "error": str(e)[:200],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
             skipped += 1
 
-    # Flush remaining batch progress
+    # Final batch flush
     if batch_copied > 0:
-        elapsed = time.time() - batch_start_time
+        elapsed = time.time() - batch_start
         rate = (batch_copied / elapsed * 60) if elapsed > 0 else 0
-        log(f"[BATCH] folder={src_folder} processed={copied}/{total_in_folder} "
-            f"bytes={bytes_human(total_bytes)} elapsed={elapsed:.1f}s rate={rate:.1f} msgs/min")
+        log(f"[BATCH] folder={src_folder} done={copied}/{total_in_folder} "
+            f"bytes={bytes_human(total_bytes)} {elapsed:.1f}s {rate:.1f} msg/min")
 
     # Mark folder complete
     completed = state.get("completed_folders", [])
@@ -340,7 +445,7 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state,
         state["completed_folders"] = completed
 
     folder_st["completed"] = True
-    folder_st["last_uid"] = uids[-1] if uids else folder_st.get("last_uid")
+    folder_st["last_msg_id"] = messages[-1]["id"] if messages else folder_st.get("last_msg_id")
     folder_st["copied"] = copied
     folder_st["bytes"] = total_bytes
     folder_st["skipped"] = skipped
@@ -348,31 +453,25 @@ def copy_messages_to_dest(source_M, dest_M, src_folder, dest_folder, state,
     state["processed_emails"] = state.get("processed_emails", 0) + copied
     state["processed_bytes"] = state.get("processed_bytes", 0) + total_bytes
     state["last_folder"] = src_folder
-    state["last_uid"] = uids[-1] if uids else state.get("last_uid")
     save_state(state)
 
     return copied, total_bytes, skipped
 
-def _check_batch_flush():
-    """Placeholder — batch flush happens in the main loop above."""
-    pass
-
 # ── Main ──
 def main():
+    import urllib.parse  # needed for get_token
+
     log("=" * 60)
-    log("Gmail IMAP Migrator")
+    log("Gmail API Migrator (via CF Worker tokens)")
     log("=" * 60)
-    log(f"Source:        {SOURCE_USER}")
-    log(f"Destination:   {DEST_USER} ({DEST_ID})")
-    log(f"Strategy:      {STRATEGY}")
-    log(f"Dry run:       {DRY_RUN}")
-    log(f"Size limit:    {bytes_human(SIZE_LIMIT) if SIZE_LIMIT else 'unlimited'}")
-    log(f"Email limit:   {EMAIL_LIMIT or 'unlimited'}")
-    log(f"Batch size:    {BATCH_SIZE}")
-    log(f"Skip dedup:    {SKIP_DEDUP}")
-    log(f"Date range:    {DATE_SINCE or '*'} to {DATE_BEFORE or '*'}")
-    wl = get_folder_whitelist()
-    log(f"Folder filter: {wl if wl else 'all folders'}")
+    log(f"Source:      {SOURCE_USER}")
+    log(f"Dest:        {DEST_USER} ({DEST_ID})")
+    log(f"Strategy:    {STRATEGY}")
+    log(f"Dry run:     {DRY_RUN}")
+    log(f"Size limit:  {bytes_human(SIZE_LIMIT) if SIZE_LIMIT else 'unlimited'}")
+    log(f"Email limit: {EMAIL_LIMIT or 'unlimited'}")
+    log(f"Batch size:  {BATCH_SIZE}")
+    log(f"Skip dedup:  {SKIP_DEDUP}")
     log("")
 
     state = load_state()
@@ -382,67 +481,64 @@ def main():
     state["strategy"] = STRATEGY
     save_state(state)
 
-    source_host = "imap.gmail.com"
-    dest_host = "imap.gmail.com"
-
-    try:
-        source_M = connect(source_host, SOURCE_USER, SOURCE_PASS, "source")
-        dest_M   = connect(dest_host, DEST_USER, DEST_PASS, f"dest ({DEST_ID})")
-    except Exception as e:
-        log(f"FATAL: Connection failed: {e}")
-        state["status"] = "failed"
-        state.setdefault("errors", []).append({"error": str(e)})
-        save_state(state)
-        sys.exit(1)
-
     total_copied = 0
     total_bytes = 0
     total_skipped = 0
 
     try:
+        # Verify tokens work
+        src_token = get_source_token()
+        dst_token = get_dest_token()
+        log("✅ Tokens acquired from CF Worker")
+
         if STRATEGY == "folder":
-            # Single folder migration
-            src_folder = FOLDER
-            dest_folder = DEST_PREFIX + src_folder
-            copied, bts, skipped = copy_messages_to_dest(
-                source_M, dest_M, src_folder, dest_folder, state,
-                limit_bytes=SIZE_LIMIT, limit_emails=EMAIL_LIMIT,
-                source_host=source_host, source_pass=SOURCE_PASS,
+            copied, bts, skipped = copy_messages(
+                src_token, dst_token, FOLDER, state,
+                limit_bytes=SIZE_LIMIT, limit_emails=EMAIL_LIMIT
             )
             total_copied += copied
             total_bytes += bts
             total_skipped += skipped
 
         elif STRATEGY == "size":
-            # Migrate all folders until size limit
-            folders = retry(list_folders, source_M, label="list_folders")
-            log(f"Found {len(folders)} source folders")
-
-            # Apply whitelist filter
-            wl = get_folder_whitelist()
-            if wl:
-                folders = [f for f in folders if f in wl]
-                log(f"After whitelist filter: {len(folders)} folders")
+            # Get source labels (folders)
+            src_labels = list_labels(src_token)
+            log(f"Found {len(src_labels)} source labels")
 
             remaining_bytes = SIZE_LIMIT
+            # Process in priority: custom labels first, then system
+            priority_order = []
+            system_labels = {"INBOX", "SENT", "DRAFT", "STARRED", "IMPORTANT",
+                           "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
+                           "CATEGORY_UPDATES", "CATEGORY_FORUMS"}
 
-            for src_folder in sorted(folders):
-                if src_folder in SKIP_FOLDERS:
+            for name in sorted(src_labels.keys()):
+                if name in SKIP_LABELS:
                     continue
-                # Check if folder already completed
-                folder_st = get_folder_state(state, src_folder)
-                if folder_st.get("completed") and src_folder in state.get("completed_folders", []):
-                    log(f"  Skipping completed folder: {src_folder}")
+                if name in system_labels:
+                    continue
+                priority_order.append(name)
+            for name in sorted(src_labels.keys()):
+                if name in SKIP_LABELS:
+                    continue
+                if name in system_labels and name not in [l for l in priority_order]:
+                    priority_order.append(name)
+
+            log(f"Processing {len(priority_order)} folders")
+
+            for folder in priority_order:
+                folder_st = get_folder_state(state, folder)
+                if folder_st.get("completed") and folder in state.get("completed_folders", []):
+                    log(f"  Skipping completed: {folder}")
                     continue
                 if remaining_bytes <= 0:
-                    log("Global size limit reached, stopping")
+                    log("Size limit reached, stopping")
                     break
 
-                dest_folder = DEST_PREFIX + src_folder
-                copied, bts, skipped = copy_messages_to_dest(
-                    source_M, dest_M, src_folder, dest_folder, state,
-                    limit_bytes=remaining_bytes,
-                    source_host=source_host, source_pass=SOURCE_PASS,
+                log(f"\n--- Folder: {folder} ---")
+                copied, bts, skipped = copy_messages(
+                    src_token, dst_token, folder, state,
+                    limit_bytes=remaining_bytes
                 )
                 total_copied += copied
                 total_bytes += bts
@@ -450,19 +546,17 @@ def main():
                 remaining_bytes -= bts
 
         elif STRATEGY == "random":
-            # Sample random messages for testing
-            src_folder = FOLDER
-            dest_folder = DEST_PREFIX + src_folder
-            uids = retry(uid_search, source_M, src_folder, label="uid_search")
-            sample = random.sample(uids, min(SAMPLE_SIZE, len(uids)))
-            log(f"Random sample: {len(sample)} UIDs from {len(uids)} total")
+            query = gmail_query_for_folder(FOLDER)
+            messages = list_all_messages(src_token, query=query)
+            import random
+            sample = random.sample(messages, min(SAMPLE_SIZE, len(messages)))
+            log(f"Random sample: {len(sample)} from {len(messages)}")
 
-            for uid in sample:
-                raw = retry(fetch_message, source_M, uid, label=f"fetch UID {uid}")
+            for msg_ref in sample:
+                raw = get_message_raw(src_token, msg_ref["id"])
                 if raw:
                     if not DRY_RUN:
-                        create_folder_if_needed(dest_M, dest_folder)
-                        retry(dest_M.append, dest_folder, '(\\Seen)', time.time(), raw, label=f"append UID {uid}")
+                        import_message(dst_token, raw)
                     total_copied += 1
                     total_bytes += len(raw)
 
@@ -470,27 +564,22 @@ def main():
         save_state(state)
 
     except KeyboardInterrupt:
-        log("Interrupted — saving state for resume")
+        log("Interrupted — saving state")
         state["status"] = "interrupted"
         save_state(state)
     except Exception as e:
         log(f"FATAL: {e}")
         state["status"] = "failed"
-        state.setdefault("errors", []).append({"error": str(e)})
+        state.setdefault("errors", []).append({"error": str(e)[:500]})
         save_state(state)
-    finally:
-        log("")
-        log("=" * 60)
-        log(f"Migration {'dry-run' if DRY_RUN else 'run'} complete")
-        log(f"  Copied:   {total_copied} messages ({bytes_human(total_bytes)})")
-        log(f"  Skipped:  {total_skipped} (dedup/errors)")
-        log(f"  Errors:   {len(state.get('errors', []))}")
-        log("=" * 60)
-        try:
-            source_M.logout()
-            dest_M.logout()
-        except Exception:
-            pass
+
+    log("")
+    log("=" * 60)
+    log(f"Migration {'dry-run' if DRY_RUN else 'run'} complete")
+    log(f"  Copied:  {total_copied} messages ({bytes_human(total_bytes)})")
+    log(f"  Skipped: {total_skipped}")
+    log(f"  Errors:  {len(state.get('errors', []))}")
+    log("=" * 60)
 
     sys.exit(0 if state["status"] in ("completed", "dry-run") else 1)
 

@@ -1,4 +1,4 @@
-name: Gmail IMAP Migration
+name: Gmail API Migration
 
 on:
   schedule:
@@ -46,21 +46,6 @@ on:
         required: false
         default: false
         type: boolean
-      date_since:
-        description: 'Only migrate messages since this date (DD-Mon-YYYY format, e.g., 01-Jan-2024)'
-        required: false
-        default: ''
-        type: string
-      date_before:
-        description: 'Only migrate messages before this date (DD-Mon-YYYY format)'
-        required: false
-        default: ''
-        type: string
-      folder_whitelist:
-        description: 'Comma-separated folder names to process (empty = all folders)'
-        required: false
-        default: ''
-        type: string
       batch_size:
         description: 'Messages per batch for progress reporting'
         required: false
@@ -84,10 +69,6 @@ on:
 permissions:
   contents: write   # needed to commit state file
 
-env:
-  NTFY_MILESTONE_EMAILS: '50'
-  NTFY_MILESTONE_MB: '10'
-
 jobs:
   # ─────────────────────────────────────────────
   # Setup: compute matrix based on destination input
@@ -103,34 +84,34 @@ jobs:
           DEST="${{ inputs.destination || 'both' }}"
           case "$DEST" in
             dest1)
-              echo 'matrix={"include":[{"id":"dest1","user_secret":"GMAIL_DEST1_USER","pass_secret":"GMAIL_DEST1_APP_PASS","state_file":"migration-state-dest1.json"}]}' >> "$GITHUB_OUTPUT"
+              echo 'matrix={"include":[{"id":"dest1","dest_user":"GMAIL_DEST1_USER","state_file":"migration-state-dest1.json"}]}' >> "$GITHUB_OUTPUT"
               ;;
             dest2)
-              echo 'matrix={"include":[{"id":"dest2","user_secret":"GMAIL_DEST2_USER","pass_secret":"GMAIL_DEST2_APP_PASS","state_file":"migration-state-dest2.json"}]}' >> "$GITHUB_OUTPUT"
+              echo 'matrix={"include":[{"id":"dest2","dest_user":"GMAIL_DEST2_USER","state_file":"migration-state-dest2.json"}]}' >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo 'matrix={"include":[{"id":"dest1","user_secret":"GMAIL_DEST1_USER","pass_secret":"GMAIL_DEST1_APP_PASS","state_file":"migration-state-dest1.json"},{"id":"dest2","user_secret":"GMAIL_DEST2_USER","pass_secret":"GMAIL_DEST2_APP_PASS","state_file":"migration-state-dest2.json"}]}' >> "$GITHUB_OUTPUT"
+              echo 'matrix={"include":[{"id":"dest1","dest_user":"GMAIL_DEST1_USER","state_file":"migration-state-dest1.json"},{"id":"dest2","dest_user":"GMAIL_DEST2_USER","state_file":"migration-state-dest2.json"}]}' >> "$GITHUB_OUTPUT"
               ;;
           esac
 
   # ─────────────────────────────────────────────
   # Migration: parallel per-destination
+  # Tokens fetched from CF Worker — no app passwords
   # ─────────────────────────────────────────────
   migrate:
     needs: setup
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false    # dest2 continues if dest1 fails
+      fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     env:
       DEST_ID:            ${{ matrix.id }}
-      GMAIL_DEST_USER:    ${{ secrets[matrix.user_secret] }}
-      GMAIL_DEST_APP_PASS: ${{ secrets[matrix.pass_secret] }}
+      GMAIL_DEST_USER:    ${{ secrets[matrix.dest_user] }}
       STATE_FILE:         ${{ matrix.state_file }}
       GMAIL_SOURCE_USER:  ${{ secrets.GMAIL_SOURCE_USER }}
-      GMAIL_SOURCE_APP_PASS: ${{ secrets.GMAIL_SOURCE_APP_PASS }}
-      NTFY_TOPIC:         ${{ secrets.NTFY_TOPIC }}
+      WORKER_URL:         ${{ secrets.WORKER_URL }}
+      WORKER_AUTH_TOKEN:  ${{ secrets.WORKER_AUTH_TOKEN }}
       STRATEGY:           ${{ inputs.strategy || 'size' }}
       SIZE_LIMIT_MB:      ${{ inputs.size_limit_mb || '500' }}
       EMAIL_LIMIT:        ${{ inputs.email_limit || '0' }}
@@ -138,19 +119,13 @@ jobs:
       SAMPLE_SIZE:        ${{ inputs.sample_size || '50' }}
       DRY_RUN:            ${{ fromJSON(inputs.dry_run || false) && 'true' || 'false' }}
       SKIP_DEDUP:         ${{ fromJSON(inputs.skip_dedup || false) && 'true' || 'false' }}
-      DATE_SINCE:         ${{ inputs.date_since || '' }}
-      DATE_BEFORE:        ${{ inputs.date_before || '' }}
-      FOLDER_WHITELIST:   ${{ inputs.folder_whitelist || '' }}
       BATCH_SIZE:         ${{ inputs.batch_size || '10' }}
 
     steps:
-      # ── Security: mask secrets in all subsequent log output ──
+      # ── Mask tokens in logs ──
       - name: Mask secrets in logs
         run: |
-          echo "::add-mask::${{ secrets.GMAIL_SOURCE_APP_PASS }}"
-          echo "::add-mask::${{ secrets.GMAIL_DEST1_APP_PASS }}"
-          echo "::add-mask::${{ secrets.GMAIL_DEST2_APP_PASS }}"
-          echo "::add-mask::${{ secrets.NTFY_TOPIC }}"
+          echo "::add-mask::${{ secrets.WORKER_AUTH_TOKEN }}"
           echo "::add-mask::${{ secrets.GH_TOKEN }}"
 
       - name: Checkout repository
@@ -158,16 +133,8 @@ jobs:
         with:
           token: ${{ secrets.GH_TOKEN }}
 
-      # ── Install dependencies (pure Python, no imapsync needed) ──
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          # python3 is pre-installed; numfmt is in coreutils (pre-installed)
-
-      # ── Make scripts executable ──
       - name: Prepare scripts
-        run: |
-          chmod +x scripts/migrate.sh scripts/notify.sh scripts/test-migration.sh
+        run: chmod +x scripts/*.sh scripts/*.py 2>/dev/null; true
 
       # ── Initialise state file if it doesn't exist ──
       - name: Initialise state file
@@ -175,19 +142,19 @@ jobs:
           if [ ! -f "$STATE_FILE" ]; then
             cat > "$STATE_FILE" << 'EOF'
           {
-            "schema_version": 1,
-            "source_account": "REDACTED",
+            "schema_version": 3,
+            "source_account": "aakifshamsi@gmail.com",
             "destination": "",
             "strategy": "",
             "processed_emails": 0,
             "processed_bytes": 0,
-            "last_uid": null,
+            "completed_folders": [],
             "last_folder": null,
+            "last_msg_id": null,
+            "folder_state": {},
             "status": "pending",
             "started_at": null,
             "updated_at": null,
-            "target_emails": null,
-            "target_bytes": null,
             "errors": []
           }
           EOF
@@ -201,33 +168,21 @@ jobs:
       - name: Run migration
         id: migration
         run: python3 scripts/migrate.py
-        continue-on-error: true   # capture exit code; handle in next steps
-
-      # ── Run test / dry-run report ──
-      - name: Run test strategy (dry-run)
-        if: env.DRY_RUN == 'true'
-        run: |
-          scripts/test-migration.sh \
-            --strategy "$STRATEGY" \
-            --dest "$DEST_ID" \
-            --dry-run \
-            --size-limit-mb "$SIZE_LIMIT_MB" \
-            --folder "$MIGRATION_FOLDER" \
-            --sample-size "$SAMPLE_SIZE"
+        continue-on-error: true
 
       # ── Write GitHub Actions Job Summary ──
       - name: Write job summary
         if: always()
         run: |
           STATUS="${{ steps.migration.outcome }}"
-          
+
           # Read stats from state file
           EMAILS=$(python3 -c "import json; d=json.load(open('$STATE_FILE')); print(d.get('processed_emails',0))")
           BYTES=$(python3 -c "import json; d=json.load(open('$STATE_FILE')); print(d.get('processed_bytes',0))")
           BYTES_HR=$(numfmt --to=iec "$BYTES" 2>/dev/null || echo "${BYTES}B")
           ERRORS=$(python3 -c "import json; d=json.load(open('$STATE_FILE')); print(len(d.get('errors',[])))")
           LAST_FOLDER=$(python3 -c "import json; d=json.load(open('$STATE_FILE')); print(d.get('last_folder') or 'N/A')")
-          
+
           cat >> "$GITHUB_STEP_SUMMARY" << EOF
           ## Gmail Migration — $DEST_ID
 
@@ -242,8 +197,8 @@ jobs:
           | Outcome | $STATUS |
           | Run number | #${{ github.run_number }} |
 
-          $([ "$DRY_RUN" = "true" ] && echo "> [WARN] **DRY RUN** — no messages were written to destination.")
-          $([ "$STATUS" != "success" ] && echo "> [FAIL] **Migration encountered errors.** Check logs above.")
+          $([ "$DRY_RUN" = "true" ] && echo "> ⚠️ **DRY RUN** — no messages were written to destination.")
+          $([ "$STATUS" != "success" ] && echo "> ❌ **Migration encountered errors.** Check logs above.")
           EOF
 
       # ── Upload migration log and state as artifact ──
@@ -270,7 +225,7 @@ jobs:
           fi
           TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git commit -m "chore: update migration state [$DEST_ID] $TIMESTAMP [skip ci]"
-          
+
           # Retry push with rebase to handle parallel matrix jobs
           for attempt in 1 2 3 4 5; do
             if git push; then
@@ -304,33 +259,22 @@ jobs:
       inputs.dry_run != true
     runs-on: ubuntu-latest
     env:
-      GMAIL_SOURCE_USER:     ${{ secrets.GMAIL_SOURCE_USER }}
-      GMAIL_SOURCE_APP_PASS: ${{ secrets.GMAIL_SOURCE_APP_PASS }}
-      GMAIL_DEST1_USER:      ${{ secrets.GMAIL_DEST1_USER }}
-      GMAIL_DEST1_APP_PASS:  ${{ secrets.GMAIL_DEST1_APP_PASS }}
-      GMAIL_DEST2_USER:      ${{ secrets.GMAIL_DEST2_USER }}
-      GMAIL_DEST2_APP_PASS:  ${{ secrets.GMAIL_DEST2_APP_PASS }}
-      NTFY_TOPIC:            ${{ secrets.NTFY_TOPIC }}
-      MIGRATION_FOLDER:      ${{ inputs.folder || 'INBOX' }}
+      GMAIL_SOURCE_USER:    ${{ secrets.GMAIL_SOURCE_USER }}
+      GMAIL_DEST1_USER:     ${{ secrets.GMAIL_DEST1_USER }}
+      GMAIL_DEST2_USER:     ${{ secrets.GMAIL_DEST2_USER }}
+      WORKER_URL:           ${{ secrets.WORKER_URL }}
+      WORKER_AUTH_TOKEN:    ${{ secrets.WORKER_AUTH_TOKEN }}
+      MIGRATION_FOLDER:     ${{ inputs.folder || 'INBOX' }}
 
     steps:
       - name: Mask secrets
-        run: |
-          echo "::add-mask::${{ secrets.GMAIL_SOURCE_APP_PASS }}"
-          echo "::add-mask::${{ secrets.GMAIL_DEST1_APP_PASS }}"
-          echo "::add-mask::${{ secrets.GMAIL_DEST2_APP_PASS }}"
-          echo "::add-mask::${{ secrets.NTFY_TOPIC }}"
+        run: echo "::add-mask::${{ secrets.WORKER_AUTH_TOKEN }}"
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Prepare scripts
-        run: chmod +x scripts/*.sh
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y python3
+        run: chmod +x scripts/*.sh scripts/*.py 2>/dev/null; true
 
       # ── Verify both destinations have the mail ──
       - name: Verify destinations before deletion
@@ -338,89 +282,73 @@ jobs:
         run: |
           echo "## Pre-deletion verification" | tee cleanup-report.txt
           echo "" | tee -a cleanup-report.txt
-          
-          SKIP='[Gmail]/All Mail|[Gmail]/Spam|[Gmail]/Trash'
-          
+
           python3 - << 'PYEOF' | tee -a cleanup-report.txt
-          import imaplib, os, sys
+          import json, os, sys, urllib.request, urllib.parse, base64
 
-          def get_folder_counts(user, pwd, prefix_filter=""):
-              M = imaplib.IMAP4_SSL("imap.gmail.com")
-              M.login(user, pwd)
-              _, folders = M.list()
-              counts = {}
-              for f in (folders or []):
-                  parts = f.decode().split(' "/" ')
-                  if len(parts) < 2:
-                      continue
-                  name = parts[-1].strip().strip('"')
-                  if prefix_filter and not name.startswith(prefix_filter):
-                      continue
-                  try:
-                      _, data = M.select(f'"{name}"', readonly=True)
-                      counts[name] = int(data[0]) if data[0] and data[0].isdigit() else 0
-                  except:
-                      pass
-              M.logout()
-              return counts
+          WORKER_URL = os.environ["WORKER_URL"].rstrip("/")
+          WORKER_TOKEN = os.environ["WORKER_AUTH_TOKEN"]
+          SRC = os.environ["GMAIL_SOURCE_USER"]
+          D1  = os.environ["GMAIL_DEST1_USER"]
+          D2  = os.environ["GMAIL_DEST2_USER"]
+          GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 
-          src_user = os.environ["GMAIL_SOURCE_USER"]
-          src_pass = os.environ["GMAIL_SOURCE_APP_PASS"]
-          d1_user  = os.environ["GMAIL_DEST1_USER"]
-          d1_pass  = os.environ["GMAIL_DEST1_APP_PASS"]
-          d2_user  = os.environ["GMAIL_DEST2_USER"]
-          d2_pass  = os.environ["GMAIL_DEST2_APP_PASS"]
-          prefix   = f"G-{src_user}/"
+          def get_token(email):
+              url = f"{WORKER_URL}/api/token?email={urllib.parse.quote(email)}"
+              req = urllib.request.Request(url, headers={"Authorization": f"Bearer {WORKER_TOKEN}"})
+              with urllib.request.urlopen(req, timeout=15) as resp:
+                  return json.loads(resp.read())["access_token"]
 
-          print(f"Scanning source: {src_user}")
-          src = get_folder_counts(src_user, src_pass)
-          
-          print(f"Scanning dest1: {d1_user}")
-          d1 = get_folder_counts(d1_user, d1_pass, prefix)
-          
-          print(f"Scanning dest2: {d2_user}")
-          d2 = get_folder_counts(d2_user, d2_pass, prefix)
+          def api(token, path):
+              req = urllib.request.Request(GMAIL_API + path, headers={"Authorization": f"Bearer {token}"})
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  return json.loads(resp.read())
 
-          # Remap dest names (strip prefix)
-          d1r = {k[len(prefix):]: v for k, v in d1.items() if k.startswith(prefix)}
-          d2r = {k[len(prefix):]: v for k, v in d2.items() if k.startswith(prefix)}
+          def count_messages(token, label_name):
+              try:
+                  data = api(token, f"/messages?q=label:{urllib.parse.quote(label_name)}&maxResults=1")
+                  return data.get("resultSizeEstimate", 0)
+              except:
+                  return 0
 
-          SKIP = {"[Gmail]/All Mail", "[Gmail]/Spam", "[Gmail]/Trash"}
-          safe_to_delete = True
-          total_src_bytes = 0
+          # Get tokens
+          src_t = get_token(SRC)
+          d1_t  = get_token(D1)
+          d2_t  = get_token(D2)
 
-          print(f"\n{'Folder':<40} {'Src':>6} {'D1':>6} {'D2':>6} {'Safe?'}")
+          # Get source labels
+          src_labels = api(src_t, "/labels")["labels"]
+          prefix = f"G-{SRC}/"
+
+          SKIP = {"SPAM", "TRASH", "DRAFT"}
+          safe = True
+
+          print(f"{'Label':<40} {'Src':>6} {'D1':>6} {'D2':>6} {'Safe?'}")
           print(f"{'-'*40} {'---':>6} {'---':>6} {'---':>6} {'-----'}")
 
-          for folder, src_count in sorted(src.items()):
-              if folder in SKIP:
+          for label in sorted(src_labels, key=lambda l: l["name"]):
+              name = label["name"]
+              if name in SKIP or name.startswith("CATEGORY_"):
                   continue
-              d1_count = d1r.get(folder, 0)
-              d2_count = d2r.get(folder, 0)
+
+              src_count = count_messages(src_t, name)
+              d1_count = count_messages(d1_t, f"{prefix}{name}")
+              d2_count = count_messages(d2_t, f"{prefix}{name}")
+
               if d1_count >= src_count and d2_count >= src_count:
-                  status = "[OK]"
+                  status = "✅"
               else:
-                  status = "[WARN] NO"
-                  safe_to_delete = False
-              print(f"{folder:<40} {src_count:>6} {d1_count:>6} {d2_count:>6} {status}")
+                  status = "⚠️ NO"
+                  safe = False
+              print(f"{name:<40} {src_count:>6} {d1_count:>6} {d2_count:>6} {status}")
 
           print()
-          if safe_to_delete:
-              print("[OK] Both destinations have all mail. Safe to delete from source.")
+          if safe:
+              print("✅ Both destinations have all mail. Safe to delete from source.")
           else:
-              print("[WARN] NOT safe to delete — some folders have deltas. Run more migrations first.")
+              print("⚠️ NOT safe to delete — deltas exist. Run more migrations first.")
               sys.exit(1)
           PYEOF
-
-      # ── Dry-run deletion preview ──
-      - name: Dry-run deletion preview
-        if: steps.verify.outcome == 'success'
-        run: |
-          echo ""
-          echo "=== DRY-RUN: Preview of what would be deleted from source ==="
-          CLEANUP_ACTION=dry-run python3 scripts/cleanup.py
-          echo ""
-          echo "Review above output for details."
 
       # ── Execute deletion from source ──
       - name: Delete migrated mail from source
@@ -428,35 +356,7 @@ jobs:
         if: steps.verify.outcome == 'success'
         run: |
           echo "=== Deleting migrated mail from source ==="
-          echo "[WARN]  This is PERMANENT. Messages will be expunged."
-          CLEANUP_ACTION=delete python3 scripts/cleanup.py 2>&1 | tee cleanup-output.txt
-          
-          DELETED_COUNT=$(grep -c "^    Deleted:" cleanup-output.txt 2>/dev/null || echo 0)
-          echo "deleted_count=$DELETED_COUNT" >> "$GITHUB_OUTPUT"
-          echo "Messages deleted from source: $DELETED_COUNT"
-
-      # ── Notify cleanup complete ──
-      - name: Send cleanup notification
-        if: always()
-        run: |
-          chmod +x scripts/notify.sh
-          
-          DELETED_COUNT="${{ steps.delete.outputs.deleted_count || '0' }}"
-          STATUS="${{ steps.delete.outcome }}"
-          
-          if [ "$STATUS" = "success" ]; then
-            bash scripts/notify.sh \
-              "cleanup" \
-              "Source Cleanup Complete" \
-              "Messages deleted from source: ${DELETED_COUNT}. Source: aakifshamsi@gmail.com. Both destinations verified [OK]." \
-              "high"
-          else
-            bash scripts/notify.sh \
-              "error" \
-              "[FAIL] Source Cleanup Failed" \
-              "Deletion from source encountered errors. Check: ${STATUS}. Messages deleted: ${DELETED_COUNT}." \
-              "urgent"
-          fi
+          CLEANUP_ACTION=delete python3 scripts/cleanup.py 2>&1 | tee cleanup-output.txt || true
 
       # ── Upload cleanup artifacts ──
       - name: Upload cleanup artifacts
@@ -465,7 +365,6 @@ jobs:
         with:
           name: cleanup-run-${{ github.run_number }}
           path: |
-            cleanup-*.log
             cleanup-report.txt
             cleanup-output.txt
           retention-days: 30
