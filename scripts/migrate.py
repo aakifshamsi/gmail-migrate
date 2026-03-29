@@ -34,6 +34,8 @@ from datetime import datetime, timezone
 # ── Config ──
 WORKER_URL      = os.environ["WORKER_URL"].rstrip("/")
 WORKER_TOKEN    = os.environ["WORKER_AUTH_TOKEN"]
+CF_ACCESS_ID    = os.environ.get("CF_ACCESS_CLIENT_ID", "")
+CF_ACCESS_SECRET = os.environ.get("CF_ACCESS_CLIENT_SECRET", "")
 SOURCE_USER     = os.environ["GMAIL_SOURCE_USER"]
 DEST_USER       = os.environ["GMAIL_DEST_USER"]
 DEST_ID         = os.environ.get("DEST_ID", "dest")
@@ -75,7 +77,11 @@ def get_token(email_addr):
         return _token_cache[email_addr]
 
     url = f"{WORKER_URL}/api/token?email={urllib.parse.quote(email_addr)}"
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {WORKER_TOKEN}"})
+    headers = {"Authorization": f"Bearer {WORKER_TOKEN}"}
+    if CF_ACCESS_ID:
+        headers["CF-Access-Client-Id"] = CF_ACCESS_ID
+        headers["CF-Access-Client-Secret"] = CF_ACCESS_SECRET
+    req = urllib.request.Request(url, headers=headers)
 
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:

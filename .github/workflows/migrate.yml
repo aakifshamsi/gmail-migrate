@@ -112,6 +112,8 @@ jobs:
       GMAIL_SOURCE_USER:  ${{ secrets.GMAIL_SOURCE_USER }}
       WORKER_URL:         ${{ secrets.WORKER_URL }}
       WORKER_AUTH_TOKEN:  ${{ secrets.WORKER_AUTH_TOKEN }}
+      CF_ACCESS_CLIENT_ID:     ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
       STRATEGY:           ${{ inputs.strategy || 'size' }}
       SIZE_LIMIT_MB:      ${{ inputs.size_limit_mb || '500' }}
       EMAIL_LIMIT:        ${{ inputs.email_limit || '0' }}
@@ -126,6 +128,7 @@ jobs:
       - name: Mask secrets in logs
         run: |
           echo "::add-mask::${{ secrets.WORKER_AUTH_TOKEN }}"
+          echo "::add-mask::${{ secrets.CF_ACCESS_CLIENT_SECRET }}"
           echo "::add-mask::${{ secrets.GH_TOKEN }}"
 
       - name: Checkout repository
@@ -264,11 +267,15 @@ jobs:
       GMAIL_DEST2_USER:     ${{ secrets.GMAIL_DEST2_USER }}
       WORKER_URL:           ${{ secrets.WORKER_URL }}
       WORKER_AUTH_TOKEN:    ${{ secrets.WORKER_AUTH_TOKEN }}
+      CF_ACCESS_CLIENT_ID:     ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
       MIGRATION_FOLDER:     ${{ inputs.folder || 'INBOX' }}
 
     steps:
       - name: Mask secrets
-        run: echo "::add-mask::${{ secrets.WORKER_AUTH_TOKEN }}"
+        run: |
+          echo "::add-mask::${{ secrets.WORKER_AUTH_TOKEN }}"
+          echo "::add-mask::${{ secrets.CF_ACCESS_CLIENT_SECRET }}"
 
       - name: Checkout repository
         uses: actions/checkout@v4
