@@ -8,8 +8,5 @@
       "binding": "TOKENS",
       "id": "8499bbd2bcf0437aba2e0cd579ba41a3"
     }
-  ],
-  "triggers": {
-    "crons": ["*/5 * * * *"]
-  }
+  ]
 }

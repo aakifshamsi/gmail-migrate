@@ -167,6 +167,9 @@ jobs:
             cat "$STATE_FILE"
           fi
 
+      - name: Validate migration script syntax
+        run: python3 -m py_compile scripts/migrate.py
+
       # ── Run migration ──
       - name: Run migration
         id: migration
