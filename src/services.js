@@ -61,7 +61,11 @@ async function githubBackupRead(env){
   });
 
   if (res.status === 404) return {sha: null, data: {sessions: {}, pending_stats: []}};
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const snippet = await res.text().then(function(t){ return t.slice(0, 200); }).catch(function(){ return "(unreadable)"; });
+    console.error("[githubBackupRead] HTTP " + res.status + " for " + env.GH_BACKUP_REPO + "/" + env.GH_BACKUP_PATH + " — " + snippet);
+    return null;
+  }
 
   const payload = await res.json();
   const raw = atob(payload.content.replace(/\n/g, ""));
@@ -188,10 +192,35 @@ async function track(env, type, amt){
   }
 }
 
-function buildAuthRedirect(url, env, hint){
+async function hmacSign(payload, secret){
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    {name: "HMAC", hash: "SHA-256"},
+    false,
+    ["sign"]
+  );
+  const buf = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+
+async function hmacVerify(payload, sig, secret){
+  try {
+    return (await hmacSign(payload, secret)) === sig;
+  } catch (_err) {
+    return false;
+  }
+}
+
+async function buildAuthRedirect(url, env, hint){
   const nonce = crypto.randomUUID();
   const ts = Date.now();
-  const state = btoa(JSON.stringify({nonce, ts}));
+  const payload = btoa(JSON.stringify({nonce, ts}));
+  let state = payload;
+  if (env.GOOGLE_CLIENT_SECRET) {
+    const sig = await hmacSign(payload, env.GOOGLE_CLIENT_SECRET);
+    state = payload + "." + sig;
+  }
   const redirectUri = url.origin + "/callback";
   const location = AUTH + "?" + qs({
     client_id: env.GOOGLE_CLIENT_ID,
@@ -222,12 +251,21 @@ function parseCookies(request){
   return out;
 }
 
-function isOAuthStateValid(request, stateFromQuery){
+async function isOAuthStateValid(request, stateFromQuery, env){
   if (!stateFromQuery) return false;
   const cookies = parseCookies(request);
   if (!cookies.oauth_state || cookies.oauth_state !== stateFromQuery) return false;
+
+  // Verify HMAC integrity when a signature is present
+  const dotIdx = stateFromQuery.indexOf(".");
+  const payload = dotIdx === -1 ? stateFromQuery : stateFromQuery.slice(0, dotIdx);
+  const sig = dotIdx === -1 ? null : stateFromQuery.slice(dotIdx + 1);
+  if (sig && env && env.GOOGLE_CLIENT_SECRET) {
+    if (!await hmacVerify(payload, sig, env.GOOGLE_CLIENT_SECRET)) return false;
+  }
+
   try {
-    const decoded = JSON.parse(atob(stateFromQuery));
+    const decoded = JSON.parse(atob(payload));
     if (!decoded.ts || !decoded.nonce) return false;
     return Math.abs(Date.now() - decoded.ts) <= OAUTH_STATE_MAX_AGE_MS;
   } catch (_err) {

@@ -58,7 +58,7 @@ export default {
 
       if (path.startsWith("/auth/")) {
         const hint = decodeURIComponent(path.slice("/auth/".length) || "any");
-        const auth = buildAuthRedirect(url, env, hint);
+        const auth = await buildAuthRedirect(url, env, hint);
         return new Response(null, {
           status: 302,
           headers: {
@@ -69,10 +69,11 @@ export default {
       }
 
       if (path === "/callback") {
+        const clearStateCookie = "oauth_state=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/callback";
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
-        if (!code) return new Response("Missing code", {status: 400});
-        if (!isOAuthStateValid(request, state)) return new Response("Invalid OAuth state", {status: 400});
+        if (!code) return new Response("Missing code", {status: 400, headers: {"Set-Cookie": clearStateCookie}});
+        if (!await isOAuthStateValid(request, state, env)) return new Response("Invalid OAuth state", {status: 400, headers: {"Set-Cookie": clearStateCookie}});
 
         const tokenRes = await fetch(TOKEN_EP, {
           method: "POST",
