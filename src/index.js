@@ -150,7 +150,8 @@ export default {
         }
         if (!body.email) return Response.json({error: "Missing email"}, {status: 400});
 
-        await env.TOKENS.delete(body.email);
+        // Update GitHub backup first so that if it fails KV is still intact
+        // (account stays accessible via fallback rather than leaking through it).
         if (githubBackupConfigured(env)) {
           const snapshot = await githubBackupRead(env);
           if (snapshot && snapshot.data && snapshot.data.sessions && snapshot.data.sessions[body.email]) {
@@ -159,6 +160,7 @@ export default {
             await githubBackupWrite(env, snapshot.sha, snapshot.data, "backup(token-vault): remove " + body.email);
           }
         }
+        await env.TOKENS.delete(body.email);
         return Response.json({status: "removed", email: body.email});
       }
 
@@ -213,18 +215,13 @@ export default {
         const pending = snapshot.data.pending_stats || [];
         let synced = 0;
 
+        // Each item is a single-key operation {key, amt} so a mid-item quota
+        // error never leaves a partial write that would be double-applied.
         for (let i = 0; i < pending.length; i++) {
           const item = pending[i];
-          const dKey = "stats:" + item.day + ":" + item.type;
-          const mKey = "stats:" + item.month + ":" + item.type;
-          const tKey = "stats:total:" + item.type;
           try {
-            const dv = parseInt(await env.TOKENS.get(dKey) || "0", 10);
-            const mv = parseInt(await env.TOKENS.get(mKey) || "0", 10);
-            const tv = parseInt(await env.TOKENS.get(tKey) || "0", 10);
-            await env.TOKENS.put(dKey, String(dv + item.amt));
-            await env.TOKENS.put(mKey, String(mv + item.amt));
-            await env.TOKENS.put(tKey, String(tv + item.amt));
+            const current = parseInt(await env.TOKENS.get(item.key) || "0", 10);
+            await env.TOKENS.put(item.key, String(current + item.amt));
             synced++;
           } catch (err) {
             if (isKvLimitError(err)) break;

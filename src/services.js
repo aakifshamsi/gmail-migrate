@@ -50,7 +50,8 @@ function githubBackupConfigured(env){
 
 async function githubBackupRead(env){
   if (!githubBackupConfigured(env)) return null;
-  const url = GH_API + "/repos/" + env.GH_BACKUP_REPO + "/contents/" + env.GH_BACKUP_PATH;
+  const branch = env.GH_BACKUP_BRANCH || "main";
+  const url = GH_API + "/repos/" + env.GH_BACKUP_REPO + "/contents/" + env.GH_BACKUP_PATH + "?ref=" + encodeURIComponent(branch);
   const res = await fetch(url, {
     headers: {
       Authorization: "Bearer " + env.GH_BACKUP_TOKEN,
@@ -157,30 +158,33 @@ async function track(env, type, amt){
   const mKey = "stats:" + month + ":" + type;
   const tKey = "stats:total:" + type;
 
-  const dv = parseInt(await env.TOKENS.get(dKey) || "0", 10);
-  const mv = parseInt(await env.TOKENS.get(mKey) || "0", 10);
-  const tv = parseInt(await env.TOKENS.get(tKey) || "0", 10);
+  const keys = [
+    {key: dKey, current: parseInt(await env.TOKENS.get(dKey) || "0", 10)},
+    {key: mKey, current: parseInt(await env.TOKENS.get(mKey) || "0", 10)},
+    {key: tKey, current: parseInt(await env.TOKENS.get(tKey) || "0", 10)}
+  ];
 
-  try {
-    await env.TOKENS.put(dKey, String(dv + amt));
-    await env.TOKENS.put(mKey, String(mv + amt));
-    await env.TOKENS.put(tKey, String(tv + amt));
-  } catch (err) {
-    if (!isKvLimitError(err)) throw err;
-
-    if (!githubBackupConfigured(env)) return;
-    const snapshot = await githubBackupRead(env);
-    if (!snapshot) return;
-
-    snapshot.data.pending_stats.push({
-      day,
-      month,
-      type,
-      amt,
-      ts: new Date().toISOString()
-    });
-    snapshot.data.updated_at = new Date().toISOString();
-    await githubBackupWrite(env, snapshot.sha, snapshot.data, "backup(token-vault): queue stats delta");
+  // Write each key individually. On quota error, stop and queue only the
+  // keys that have not yet been written — preventing double-counting on replay.
+  for (let i = 0; i < keys.length; i++) {
+    try {
+      await env.TOKENS.put(keys[i].key, String(keys[i].current + amt));
+    } catch (err) {
+      if (!isKvLimitError(err)) throw err;
+      if (!githubBackupConfigured(env)) return;
+      const snapshot = await githubBackupRead(env);
+      if (!snapshot) return;
+      for (let j = i; j < keys.length; j++) {
+        snapshot.data.pending_stats.push({
+          key: keys[j].key,
+          amt,
+          ts: new Date().toISOString()
+        });
+      }
+      snapshot.data.updated_at = new Date().toISOString();
+      await githubBackupWrite(env, snapshot.sha, snapshot.data, "backup(token-vault): queue stats delta");
+      return;
+    }
   }
 }
 
