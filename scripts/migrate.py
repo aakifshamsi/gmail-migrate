@@ -50,6 +50,11 @@ FOLDER          = os.environ.get("MIGRATION_FOLDER", "INBOX")
 SKIP_DEDUP      = os.environ.get("SKIP_DEDUP", "false").lower() == "true"
 SAMPLE_SIZE     = int(os.environ.get("SAMPLE_SIZE", "50"))
 LOG_FILE        = "migration.log"
+NTFY_URL             = os.environ.get("NTFY_URL", "")
+NTFY_EMAIL_MILESTONE = int(os.environ.get("NTFY_EMAIL_MILESTONE", "100"))
+NTFY_MB_MILESTONE    = int(os.environ.get("NTFY_MB_MILESTONE", "50")) * 1024 * 1024
+_FOLDERS_RAW         = os.environ.get("MIGRATION_FOLDERS", "")
+FOLDERS_FILTER       = {f.strip() for f in _FOLDERS_RAW.split(",") if f.strip()} or None
 
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 
@@ -70,6 +75,21 @@ def bytes_human(n):
             return f"{n:.1f}{u}"
         n /= 1024
     return f"{n:.1f}TB"
+
+def notify(title, body, priority="default"):
+    """Send a push notification via ntfy.sh (or self-hosted ntfy)."""
+    if not NTFY_URL:
+        return
+    try:
+        req = urllib.request.Request(
+            NTFY_URL, data=body.encode("utf-8"),
+            headers={"Title": title, "Priority": priority, "Tags": "envelope"},
+            method="POST"
+        )
+        urllib.request.urlopen(req, timeout=5)
+        log(f"[ntfy] sent: {title}")
+    except Exception as e:
+        log(f"[ntfy] failed: {e}")
 
 # ── Token Management (via CF Worker) ──
 def get_token(email_addr):
@@ -464,6 +484,32 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
 
     return copied, total_bytes, skipped
 
+# ── Milestone notifications ──
+def _check_milestones(folder, total_emails, total_bytes, last_email_milestone, last_mb_milestone):
+    """Fire ntfy notifications when email/MB milestones are crossed. Returns updated milestone counters."""
+    new_email_milestone = last_email_milestone
+    new_mb_milestone = last_mb_milestone
+
+    if NTFY_EMAIL_MILESTONE > 0:
+        curr = total_emails // NTFY_EMAIL_MILESTONE
+        if curr > last_email_milestone:
+            notify(
+                f"📧 {total_emails:,} emails migrated [{DEST_ID}]",
+                f"Folder: {folder}\nSize: {bytes_human(total_bytes)}",
+            )
+            new_email_milestone = curr
+
+    if NTFY_MB_MILESTONE > 0:
+        curr = total_bytes // NTFY_MB_MILESTONE
+        if curr > last_mb_milestone:
+            notify(
+                f"💾 {bytes_human(total_bytes)} migrated [{DEST_ID}]",
+                f"Folder: {folder}\nEmails: {total_emails:,}",
+            )
+            new_mb_milestone = curr
+
+    return new_email_milestone, new_mb_milestone
+
 # ── Main ──
 def main():
     import urllib.parse  # needed for get_token
@@ -479,6 +525,10 @@ def main():
     log(f"Email limit: {EMAIL_LIMIT or 'unlimited'}")
     log(f"Batch size:  {BATCH_SIZE}")
     log(f"Skip dedup:  {SKIP_DEDUP}")
+    if FOLDERS_FILTER:
+        log(f"Folders:     {', '.join(sorted(FOLDERS_FILTER))}")
+    if NTFY_URL:
+        log(f"ntfy:        enabled (email milestone={NTFY_EMAIL_MILESTONE}, mb milestone={NTFY_MB_MILESTONE // (1024*1024)})")
     log("")
 
     state = load_state()
@@ -491,12 +541,18 @@ def main():
     total_copied = 0
     total_bytes = 0
     total_skipped = 0
+    _notified_email_milestone = 0
+    _notified_mb_milestone = 0
 
     try:
         # Verify tokens work
         src_token = get_source_token()
         dst_token = get_dest_token()
         log("✅ Tokens acquired from CF Worker")
+        notify(
+            f"Migration started [{DEST_ID}]",
+            f"Strategy: {STRATEGY}\n{SOURCE_USER} → {DEST_USER}\nDry run: {DRY_RUN}",
+        )
 
         if STRATEGY == "folder":
             copied, bts, skipped = copy_messages(
@@ -506,6 +562,10 @@ def main():
             total_copied += copied
             total_bytes += bts
             total_skipped += skipped
+            _notified_email_milestone, _notified_mb_milestone = _check_milestones(
+                FOLDER, total_copied, total_bytes,
+                _notified_email_milestone, _notified_mb_milestone
+            )
 
         elif STRATEGY == "size":
             # Get source labels (folders)
@@ -534,6 +594,10 @@ def main():
             log(f"Processing {len(priority_order)} folders")
 
             for folder in priority_order:
+                if FOLDERS_FILTER and folder not in FOLDERS_FILTER:
+                    log(f"  Skipping (not in MIGRATION_FOLDERS filter): {folder}")
+                    continue
+
                 folder_st = get_folder_state(state, folder)
                 if folder_st.get("completed") and folder in state.get("completed_folders", []):
                     log(f"  Skipping completed: {folder}")
@@ -551,6 +615,10 @@ def main():
                 total_bytes += bts
                 total_skipped += skipped
                 remaining_bytes -= bts
+                _notified_email_milestone, _notified_mb_milestone = _check_milestones(
+                    folder, total_copied, total_bytes,
+                    _notified_email_milestone, _notified_mb_milestone
+                )
 
         elif STRATEGY == "random":
             query = gmail_query_for_folder(FOLDER)
@@ -569,16 +637,25 @@ def main():
 
         state["status"] = "completed" if not DRY_RUN else "dry-run"
         save_state(state)
+        notify(
+            f"Migration {'dry-run ' if DRY_RUN else ''}complete [{DEST_ID}]",
+            f"Copied: {total_copied} messages ({bytes_human(total_bytes)})\n"
+            f"Skipped: {total_skipped}\nErrors: {len(state.get('errors', []))}",
+            priority="high",
+        )
 
     except KeyboardInterrupt:
         log("Interrupted — saving state")
         state["status"] = "interrupted"
         save_state(state)
+        notify(f"Migration interrupted [{DEST_ID}]",
+               f"Copied so far: {total_copied} ({bytes_human(total_bytes)})")
     except Exception as e:
         log(f"FATAL: {e}")
         state["status"] = "failed"
         state.setdefault("errors", []).append({"error": str(e)[:500]})
         save_state(state)
+        notify(f"Migration FAILED [{DEST_ID}]", str(e)[:300], priority="urgent")
 
     log("")
     log("=" * 60)
