@@ -1,5 +1,13 @@
 name: Deploy Cloudflare Worker
 
+# Required secrets (set in GitHub repo Settings > Secrets and variables > Actions):
+#   CLOUDFLARE_API_TOKEN - Wrangler token with Workers deploy permission
+#   CLOUDFLARE_ACCOUNT_ID - Your Cloudflare account ID (a5d54589a9ef58dd4cf5fa89b57e18ac)
+#   GOOGLE_CLIENT_ID - Google OAuth client ID
+#   GOOGLE_CLIENT_SECRET - Google OAuth client secret
+#   AUTH_TOKEN - Worker API token for dashboard auth
+#   NTFY_URL - ntfy.sh topic for notifications
+
 on:
   workflow_dispatch:
   push:
@@ -34,6 +42,14 @@ jobs:
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || (echo "Missing CLOUDFLARE_API_TOKEN" && exit 1)
           test -n "$CLOUDFLARE_ACCOUNT_ID" || (echo "Missing CLOUDFLARE_ACCOUNT_ID" && exit 1)
+
+      - name: Put Worker Secrets
+        run: |
+          echo "Setting worker secrets..."
+          npx wrangler@4 secret put GOOGLE_CLIENT_ID --config wrangler.jsonc <<< "${{ secrets.GOOGLE_CLIENT_ID }}"
+          npx wrangler@4 secret put GOOGLE_CLIENT_SECRET --config wrangler.jsonc <<< "${{ secrets.GOOGLE_CLIENT_SECRET }}"
+          npx wrangler@4 secret put AUTH_TOKEN --config wrangler.jsonc <<< "${{ secrets.AUTH_TOKEN }}"
+          npx wrangler@4 secret put NTFY_URL --config wrangler.jsonc <<< "${{ secrets.NTFY_URL }}"
 
       - name: Deploy Worker with Wrangler
         run: npx wrangler@4 deploy --config wrangler.jsonc

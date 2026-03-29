@@ -219,7 +219,7 @@ function qs(o){
 }
 
 function isReservedKey(name){
-  return name.indexOf("stats:")===0 || name.indexOf("vault:")===0;
+  return name.indexOf("stats:")===0 || name.indexOf("vault:")===0 || name.indexOf("migration:")===0;
 }
 
 function isAuthorized(request, env, url, vaultToken){
@@ -277,14 +277,23 @@ async function track(env, type, amt){
   const mKey = "stats:" + month + ":" + type;
   const tKey = "stats:total:" + type;
 
-  const dv = parseInt(await env.TOKENS.get(dKey) || "0", 10);
-  const mv = parseInt(await env.TOKENS.get(mKey) || "0", 10);
-  const tv = parseInt(await env.TOKENS.get(tKey) || "0", 10);
-
-  await env.TOKENS.put(dKey, String(dv + amt));
-  await env.TOKENS.put(mKey, String(mv + amt));
-  await env.TOKENS.put(tKey, String(tv + amt));
+  // Batch stats in memory, flush once at end of request
+  _statsBatch[dKey] = (_statsBatch[dKey] || 0) + amt;
+  _statsBatch[mKey] = (_statsBatch[mKey] || 0) + amt;
+  _statsBatch[tKey] = (_statsBatch[tKey] || 0) + amt;
 }
+
+async function flushStats(env){
+  const writes = Object.entries(_statsBatch).map(async ([key, val]) => {
+    const existing = parseInt(await env.TOKENS.get(key) || "0", 10);
+    await env.TOKENS.put(key, String(existing + val));
+  });
+  await Promise.all(writes);
+  // Clear batch after flush
+  for (const key in _statsBatch) { delete _statsBatch[key]; }
+}
+
+let _statsBatch = {};
 
 export default {
   async fetch(request, env){
@@ -341,9 +350,14 @@ export default {
         const profile = await gmailProfile(tokenData.access_token);
         const email = profile.emailAddress;
 
+        // Preserve existing refresh_token if Google doesn't provide a new one
+        // (Google only returns refresh_token on first consent or with prompt=consent)
+        let existingSession = await env.TOKENS.get(email, "json");
+        const newRefreshToken = tokenData.refresh_token || (existingSession && existingSession.refresh_token);
+
         await env.TOKENS.put(email, JSON.stringify({
           access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
+          refresh_token: newRefreshToken,
           expires_at: Date.now() + (tokenData.expires_in || 3600) * 1000
         }));
 
@@ -396,6 +410,11 @@ export default {
       return new Response("Not found", {status: 404});
     } catch (err) {
       return Response.json({error: err.message}, {status: 500});
+    } finally {
+      // Flush any batched stats before returning
+      if (typeof flushStats === 'function' && Object.keys(_statsBatch).length > 0) {
+        await flushStats(env).catch(() => {});
+      }
     }
   }
 };
