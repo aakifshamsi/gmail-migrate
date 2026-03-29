@@ -1,101 +1,83 @@
-# Gmail IMAP Migration
+# Gmail Migration (Token Vault + GitHub Actions Engine)
 
-Migrate emails from **aakifshamsi@gmail.com** → **aakif007@gmail.com** + **aakif17@gmail.com** using imapsync.
+This repo now uses a **thin Cloudflare Worker token vault** and runs all migration/cleanup logic in **GitHub Actions + Python scripts**.
 
 ## Architecture
 
-- **Source:** aakifshamsi@gmail.com
-- **Dest 1:** aakif007@gmail.com → `migration-state-dest1.json`
-- **Dest 2:** aakif17@gmail.com → `migration-state-dest2.json`
-- **Orchestration:** GitHub Actions (parallel matrix strategy)
-- **Notifications:** ntfy.sh + Monetag referral link
+- **Cloudflare Worker (`src/index.js`)**
+  - Google OAuth connect flow
+  - Stores refresh/access tokens in KV
+  - Vends fresh access tokens via `GET /api/token?email=...`
+  - Account management (`/api/accounts`, `/api/remove`)
+- **GitHub Actions**
+  - `.github/workflows/migrate.yml` is the migration engine (matrix by destination)
+  - `.github/workflows/test.yml` validates token-vault flow and dry-run migration paths
+- **Migration runtime**
+  - `scripts/migrate.py` calls Worker token endpoint, then Gmail API directly
 
-## Folder convention
+## Required GitHub Secrets
 
-All migrated mail lands under `G-aakifshamsi@gmail.com/` in each destination.
+| Secret | Purpose |
+|---|---|
+| `WORKER_URL` | Cloudflare Worker base URL |
+| `WORKER_AUTH_TOKEN` | Worker API bearer token |
+| `CF_ACCESS_CLIENT_ID` | Optional Cloudflare Access client ID |
+| `CF_ACCESS_CLIENT_SECRET` | Optional Cloudflare Access client secret |
+| `GMAIL_SOURCE_USER` | Source account email |
+| `GMAIL_DEST1_USER` | Destination account #1 |
+| `GMAIL_DEST2_USER` | Destination account #2 |
+| `GH_TOKEN` | PAT for committing state files from workflow |
 
-## Quick Start
+## Operational Protocol
 
-### 1. Create a GitHub repo and push this project
+1. Connect each Gmail account in Worker UI (`/auth/<email>`).
+2. Run **Tests** workflow in dry-run mode.
+3. Run **Migration** workflow in dry-run mode.
+4. Run **Migration** workflow with `dry_run=false`.
+5. Optionally run cleanup once both destination states are verified.
 
-```bash
-cd gmail-migration
-git init && git add -A && git commit -m "init gmail migration"
-gh repo create gmail-migration --private --source=. --push
-```
+## Notes for automation clients (e.g., Cline/Claw)
 
-### 2. Set up GitHub Secrets
+- Treat Worker as **token authority only**.
+- Do not call migration endpoints on Worker (they were removed).
+- Trigger/monitor workflows in `.github/workflows/*` as the execution plane.
+- Use state artifacts (`migration-state-*.json`, `migration.log`) for resumability and reporting.
 
-Go to **Settings → Secrets → Actions** and add:
 
-| Secret | Value |
-|--------|-------|
-| `GMAIL_SOURCE_USER` | `aakifshamsi@gmail.com` |
-| `GMAIL_SOURCE_APP_PASS` | *(16-char App Password)* |
-| `GMAIL_DEST1_USER` | `aakif007@gmail.com` |
-| `GMAIL_DEST1_APP_PASS` | *(App Password for dest1)* |
-| `GMAIL_DEST2_USER` | `aakif17@gmail.com` |
-| `GMAIL_DEST2_APP_PASS` | *(App Password for dest2)* |
-| `NTFY_TOPIC` | *(pick an unguessable topic name)* |
-| `GH_TOKEN` | *(PAT with `repo` scope)* |
+## KiloClaw Trial: Assist/Test Flow
 
-### 3. Run tests first
+1. Open KiloClaw on Android and connect your GitHub account.
+2. Point it to this repository and checkout your target branch.
+3. Ask KiloClaw to run a PR review with focus on:
+   - `src/index.js` auth/token endpoints
+   - `.github/workflows/test.yml` token-vault checks
+   - `.github/workflows/migrate.yml` migration execution path
+4. Run workflows from GitHub Actions UI:
+   - **Gmail Migration - Tests** (`strategy=all`, `destination=both`, `integrity_check=true`)
+   - **Gmail API Migration** (`dry_run=true` first, then `dry_run=false`)
+5. Verify artifacts and summary tables before enabling cleanup.
+6. If KiloClaw reports issues, copy/paste the exact file+line feedback for a patch pass.
 
-Go to **Actions → Gmail Migration — Tests & Integrity Checks → Run workflow**:
-- Strategy: `all`
-- Destination: `both`
-- Enable integrity check: `true`
 
-This runs dry-runs of all strategies + connection checks without writing anything.
+## Automated Cloudflare Deployment (GitHub Actions)
 
-### 4. Run migration (ad hoc)
+A deployment workflow now exists at `.github/workflows/deploy-worker.yml`.
 
-Go to **Actions → Gmail IMAP Migration → Run workflow**:
-- Strategy: `size` (recommended first run)
-- Size limit: `500` MB (safe daily cap)
-- Destination: `both`
-- Dry run: `true` first, then `false`
-- Delete from source: `false` (keep it false until you've verified)
+### Required GitHub Secrets
 
-### 5. Schedule
+| Secret | Purpose |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | API token with Worker deploy permissions |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
 
-The `migrate.yml` workflow already has a daily cron at 03:00 UTC. It runs incrementally — safe to leave on.
+### How it deploys
 
-## Cleanup: Delete from Source
+- Auto deploy on push to `main` or `work` when worker files change.
+- Manual deploy via **Actions → Deploy Cloudflare Worker → Run workflow**.
+- Runs: `npx wrangler@4 deploy --config wrangler.jsonc`
 
-After successful migration to **both** destinations, you can free up source storage:
+## Prompt for a fresh ChatGPT Codex environment
 
-1. Go to **Actions → Gmail IMAP Migration → Run workflow**
-2. Set `delete_from_source: true`
-3. The workflow will:
-   - Verify both destinations have all mail (folder-by-folder comparison)
-   - Dry-run preview what would be deleted
-   - Execute deletion with `--delete2 --expunge2`
-   - Report storage freed in the notification
+If you start a new Codex task/environment, paste this:
 
-**⚠️ WARNING:** This is PERMANENT. Only enable after:
-- At least 2 full successful migrations
-- Integrity checks pass on both destinations
-- You're comfortable with the dry-run preview
-
-## Notifications
-
-Set `NTFY_TOPIC` to an unguessable string. You'll get push notifications on:
--  Migration start
--  Every 500 emails / 100 MB
-- ✅ Completion (includes storage copied)
--  Cleanup (includes storage freed from source)
-- ❌ Errors / overquota
-
-All notifications include a Monetag referral link.
-
-Subscribe to `https://ntfy.sh/<your-topic>` on your phone.
-
-## Safety
-
-- `--delete2` is **never used during migration** — only during explicit cleanup
-- Messages > 25 MB are skipped (Gmail limit)
-- Excludes `[Gmail]/All Mail`, `[Gmail]/Spam`, `[Gmail]/Trash` to avoid duplicates
-- Rate-limited: 1 email/sec sleep, 500 MB/day cap recommended
-- Always start with `dry_run: true`
-- Cleanup verifies BOTH destinations before deleting from source
+> Open repo `gmail-migrate`. Verify branch and remotes. Configure GitHub remote if missing. Confirm Worker remains token-vault-only (no migration execution in Worker). Run workflow checks for `.github/workflows/test.yml` and `.github/workflows/migrate.yml`. Configure secrets and execute deploy using `.github/workflows/deploy-worker.yml`. Then run test workflow (`strategy=all`, `destination=both`, `integrity_check=true`) and migration workflow (`dry_run=true` then `dry_run=false`). Return exact commands and blockers.
