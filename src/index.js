@@ -152,9 +152,14 @@ export default {
 
         // Update GitHub backup first so that if it fails KV is still intact
         // (account stays accessible via fallback rather than leaking through it).
+        // If the snapshot is unreadable, abort entirely — proceeding would leave
+        // the account in the GH fallback where getToken() can still serve it.
         if (githubBackupConfigured(env)) {
           const snapshot = await githubBackupRead(env);
-          if (snapshot && snapshot.data && snapshot.data.sessions && snapshot.data.sessions[body.email]) {
+          if (snapshot === null) {
+            return Response.json({error: "Could not read GitHub backup snapshot; aborting deletion to prevent stale fallback access"}, {status: 502});
+          }
+          if (snapshot.data && snapshot.data.sessions && snapshot.data.sessions[body.email]) {
             delete snapshot.data.sessions[body.email];
             snapshot.data.updated_at = new Date().toISOString();
             await githubBackupWrite(env, snapshot.sha, snapshot.data, "backup(token-vault): remove " + body.email);
