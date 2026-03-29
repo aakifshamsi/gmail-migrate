@@ -3,6 +3,7 @@ const TOKEN_EP = "https://oauth2.googleapis.com/token";
 const GMAIL_PROFILE = "https://gmail.googleapis.com/gmail/v1/users/me/profile";
 const SCOPE = "https://www.googleapis.com/auth/gmail.modify";
 const GH_API = "https://api.github.com";
+const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
 function qs(o){
   return Object.keys(o).map(function(k){
@@ -184,8 +185,10 @@ async function track(env, type, amt){
 }
 
 function buildAuthRedirect(url, env, hint){
+  const nonce = crypto.randomUUID();
+  const ts = Date.now();
+  const state = btoa(JSON.stringify({nonce, ts}));
   const redirectUri = url.origin + "/callback";
-  const state = crypto.randomUUID();
   const location = AUTH + "?" + qs({
     client_id: env.GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
@@ -196,7 +199,36 @@ function buildAuthRedirect(url, env, hint){
     login_hint: hint === "any" ? "" : hint,
     state
   });
-  return location;
+  return {location, state};
+}
+
+function parseCookies(request){
+  const raw = request.headers.get("Cookie") || "";
+  const parts = raw.split(";");
+  const out = {};
+  for (let i = 0; i < parts.length; i++) {
+    const seg = parts[i].trim();
+    if (!seg) continue;
+    const idx = seg.indexOf("=");
+    if (idx === -1) continue;
+    const key = seg.slice(0, idx).trim();
+    const val = seg.slice(idx + 1).trim();
+    out[key] = val;
+  }
+  return out;
+}
+
+function isOAuthStateValid(request, stateFromQuery){
+  if (!stateFromQuery) return false;
+  const cookies = parseCookies(request);
+  if (!cookies.oauth_state || cookies.oauth_state !== stateFromQuery) return false;
+  try {
+    const decoded = JSON.parse(atob(stateFromQuery));
+    if (!decoded.ts || !decoded.nonce) return false;
+    return Math.abs(Date.now() - decoded.ts) <= OAUTH_STATE_MAX_AGE_MS;
+  } catch (_err) {
+    return false;
+  }
 }
 
 async function persistOAuthSession(env, email, tokenData, refreshToken){
@@ -231,5 +263,6 @@ export {
   track,
   statsEnabled,
   buildAuthRedirect,
+  isOAuthStateValid,
   persistOAuthSession
 };

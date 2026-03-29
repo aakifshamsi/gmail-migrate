@@ -19,6 +19,7 @@ import {
   track,
   statsEnabled,
   buildAuthRedirect,
+  isOAuthStateValid,
   persistOAuthSession
 } from "./services.js";
 
@@ -57,13 +58,21 @@ export default {
 
       if (path.startsWith("/auth/")) {
         const hint = decodeURIComponent(path.slice("/auth/".length) || "any");
-        const location = buildAuthRedirect(url, env, hint);
-        return new Response(null, {status: 302, headers: {Location: location}});
+        const auth = buildAuthRedirect(url, env, hint);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: auth.location,
+            "Set-Cookie": "oauth_state=" + auth.state + "; HttpOnly; Secure; SameSite=Lax; Max-Age=600; Path=/callback"
+          }
+        });
       }
 
       if (path === "/callback") {
         const code = url.searchParams.get("code");
+        const state = url.searchParams.get("state");
         if (!code) return new Response("Missing code", {status: 400});
+        if (!isOAuthStateValid(request, state)) return new Response("Invalid OAuth state", {status: 400});
 
         const tokenRes = await fetch(TOKEN_EP, {
           method: "POST",
@@ -99,11 +108,20 @@ export default {
         if (persistResult.mode === "github") {
           return new Response(null, {
             status: 302,
-            headers: {Location: "/?notice=oauth_saved_in_github_backup"}
+            headers: {
+              Location: "/?notice=oauth_saved_in_github_backup",
+              "Set-Cookie": "oauth_state=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/callback"
+            }
           });
         }
 
-        return new Response(null, {status: 302, headers: {Location: "/"}});
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: "/",
+            "Set-Cookie": "oauth_state=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/callback"
+          }
+        });
       }
 
       if (path === "/api/accounts" && request.method === "GET") {

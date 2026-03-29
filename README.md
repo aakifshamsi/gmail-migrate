@@ -16,6 +16,7 @@ This repo now uses a **thin Cloudflare Worker token vault** and runs all migrati
   - `GET /api/token?email=...`: vend fresh access token
   - `GET /api/accounts`, `POST /api/remove`: account management
   - `GET /api/stats`, `POST /api/sync-fallback`: usage snapshot + backup replay
+  - OAuth CSRF protection: `/auth/:email` now issues a short-lived `oauth_state` cookie and `/callback` validates it before token exchange
 - **GitHub Actions**
   - `.github/workflows/migrate.yml` is the migration engine (matrix by destination)
   - `.github/workflows/test.yml` validates token-vault flow and dry-run migration paths
