@@ -3,13 +3,13 @@
   "source_account": "REDACTED",
   "destination": "dest1",
   "strategy": "size",
-  "processed_emails": 469,
-  "processed_bytes": 2109436,
+  "processed_emails": 623,
+  "processed_bytes": 8053298,
   "last_uid": null,
-  "last_folder": "Digital Hands/TMF Update",
+  "last_folder": "Digital Hands/aakif",
   "status": "completed",
   "started_at": "2026-03-29T21:02:02.327144+00:00",
-  "updated_at": "2026-03-29T21:17:11.238903+00:00",
+  "updated_at": "2026-03-29T23:49:29.577119+00:00",
   "target_emails": 0,
   "target_bytes": 0,
   "errors": [],
@@ -57,6 +57,13 @@
       "completed": true
     },
     "Digital Hands/aakif": {
+      "copied": 154,
+      "bytes": 5943862,
+      "skipped": 0,
+      "last_msg_id": "12e9b02cf1c08bf8",
+      "completed": true
+    },
+    "Digital Hands/dH-Accounts": {
       "copied": 0,
       "bytes": 0,
       "skipped": 0,
@@ -68,7 +75,8 @@
     "CHAT",
     "Cash Cafe",
     "Digital Hands",
-    "Digital Hands/TMF Update"
+    "Digital Hands/TMF Update",
+    "Digital Hands/aakif"
   ],
-  "last_msg_id": "179ddfa23d62ba81"
+  "last_msg_id": "17962363b7b133c1"
 }
