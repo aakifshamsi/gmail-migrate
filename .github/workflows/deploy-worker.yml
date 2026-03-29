@@ -11,7 +11,7 @@ on:
       - main
       - work
     paths:
-      - src/index.js
+      - src/**
       - wrangler.jsonc
       - .github/workflows/deploy-worker.yml
 
