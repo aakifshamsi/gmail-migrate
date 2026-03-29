@@ -28,6 +28,7 @@ import email
 import base64
 import urllib.request
 import urllib.error
+import urllib.parse
 import ssl
 from datetime import datetime, timezone
 
@@ -77,7 +78,7 @@ def get_token(email_addr):
         return _token_cache[email_addr]
 
     url = f"{WORKER_URL}/api/token?email={urllib.parse.quote(email_addr)}"
-    headers = {"Authorization": f"Bearer {WORKER_TOKEN}"}
+    headers = {"Authorization": f"Bearer {WORKER_TOKEN}", "User-Agent": "gmail-migrate/1.0"}
     if CF_ACCESS_ID:
         headers["CF-Access-Client-Id"] = CF_ACCESS_ID
         headers["CF-Access-Client-Secret"] = CF_ACCESS_SECRET
@@ -109,7 +110,7 @@ def get_dest_token():
 def gmail_api(token, path, method="GET", body=None, content_type="application/json"):
     """Call Gmail API. Returns parsed JSON or raw bytes."""
     url = GMAIL_API + path
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}", "User-Agent": "gmail-migrate/1.0"}
 
     data = None
     if body is not None:
