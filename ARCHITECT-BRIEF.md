@@ -44,19 +44,21 @@ We're burning through CF quota doing heavy lifting that should be on GH Actions.
 
 ## Secrets
 
+> Security note: credentials below are intentionally redacted in-repo. Configure real values in your local shell / CI secrets manager.
+
 ```
-CLOUDFLARE_API_TOKEN=cfut_gggaGoRaupqiOtX22WhhmMNROpPDFQTmeavdpZbT6c231d22
-WORKER_URL=https://migrator.digitalhands.in
-WORKER_AUTH_TOKEN=gmail-migrator-2026
-CF_ACCESS_CLIENT_ID=3d4afb7ff49803fc3983fd7165e044d0.access
-CF_ACCESS_CLIENT_SECRET=920514c32f178d7ca5d54d5b706577d245b992bf440651c19af5483c7c49906b
+CLOUDFLARE_API_TOKEN=<REDACTED>
+WORKER_URL=<REDACTED>
+WORKER_AUTH_TOKEN=<REDACTED>
+CF_ACCESS_CLIENT_ID=<REDACTED>
+CF_ACCESS_CLIENT_SECRET=<REDACTED>
 ```
 
 ## Deploy
 
 ```bash
 cd gmail-migrator-cf
-CLOUDFLARE_API_TOKEN=cfut_gggaGoRaupqiOtX22WhhmMNROpPDFQTmeavdpZbT6c231d22 npx wrangler deploy --name gmail-migrator
+CLOUDFLARE_API_TOKEN=<REDACTED> npx wrangler deploy --name gmail-migrator
 ```
 
 ## Source Code
