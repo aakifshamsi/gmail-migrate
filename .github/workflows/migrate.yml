@@ -51,6 +51,21 @@ on:
         required: false
         default: '5'
         type: string
+      migration_folders:
+        description: 'Comma-separated folders to migrate (empty = all)'
+        required: false
+        default: ''
+        type: string
+      ntfy_email_milestone:
+        description: 'Notify every N emails migrated (0 = off)'
+        required: false
+        default: '100'
+        type: string
+      ntfy_mb_milestone:
+        description: 'Notify every N MB migrated (0 = off)'
+        required: false
+        default: '50'
+        type: string
       destination:
         description: 'Target destination(s)'
         required: true
@@ -122,6 +137,10 @@ jobs:
       DRY_RUN:            ${{ fromJSON(inputs.dry_run || false) && 'true' || 'false' }}
       SKIP_DEDUP:         ${{ fromJSON(inputs.skip_dedup || false) && 'true' || 'false' }}
       BATCH_SIZE:         ${{ inputs.batch_size || '10' }}
+      MIGRATION_FOLDERS:  ${{ inputs.migration_folders || '' }}
+      NTFY_URL:           ${{ secrets.NTFY_URL }}
+      NTFY_EMAIL_MILESTONE: ${{ inputs.ntfy_email_milestone || '100' }}
+      NTFY_MB_MILESTONE:  ${{ inputs.ntfy_mb_milestone || '50' }}
 
     steps:
       # ── Mask tokens in logs ──
