@@ -150,6 +150,7 @@ export default {
           return Response.json({error: "Invalid JSON body"}, {status: 400});
         }
         if (!body.email) return Response.json({error: "Missing email"}, {status: 400});
+        if (isReservedKey(body.email)) return Response.json({error: "Cannot remove a reserved key"}, {status: 400});
 
         // Update GitHub backup first so that if it fails KV is still intact
         // (account stays accessible via fallback rather than leaking through it).
@@ -225,6 +226,7 @@ export default {
         // error never leaves a partial write that would be double-applied.
         for (let i = 0; i < pending.length; i++) {
           const item = pending[i];
+          if (!item.key || !item.key.startsWith("stats:")) { synced++; continue; }
           try {
             const current = parseInt(await env.TOKENS.get(item.key) || "0", 10);
             await env.TOKENS.put(item.key, String(current + item.amt));
