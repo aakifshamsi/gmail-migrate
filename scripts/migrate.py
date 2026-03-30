@@ -6,7 +6,7 @@ No app passwords needed. Gets fresh OAuth tokens from the CF Worker's
 /api/token endpoint, then uses Gmail API for all operations.
 
 Usage (env vars):
-  WORKER_URL        — CF Worker URL (e.g. https://gmail-migrator.aakif-share.workers.dev)
+  WORKER_URL        — CF Worker URL
   WORKER_AUTH_TOKEN — Auth token for CF Worker API
   GMAIL_SOURCE_USER — Source email
   GMAIL_DEST_USER   — Destination email
@@ -19,6 +19,10 @@ Usage (env vars):
   BATCH_SIZE        — messages per batch (default 10)
   MIGRATION_FOLDER  — folder for folder/random strategy
   SKIP_DEDUP        — true to skip Message-ID dedup
+  MIGRATION_FOLDERS — comma-separated folders to process (empty = all)
+  NTFY_URL          — ntfy push notification URL
+  NTFY_EMAIL_MILESTONE — notify every N emails (default 100)
+  NTFY_MB_MILESTONE — notify every N MB (default 50)
 """
 import json
 import os
@@ -29,7 +33,6 @@ import base64
 import urllib.request
 import urllib.error
 import urllib.parse
-import ssl
 from datetime import datetime, timezone
 
 # ── Config ──
@@ -58,7 +61,6 @@ FOLDERS_FILTER       = {f.strip() for f in _FOLDERS_RAW.split(",") if f.strip()}
 
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 
-# Token cache (per-invocation)
 _token_cache = {}
 
 # ── Helpers ──
@@ -93,17 +95,14 @@ def notify(title, body, priority="default"):
 
 # ── Token Management (via CF Worker) ──
 def get_token(email_addr):
-    """Get fresh access token from CF Worker. Cached per-invocation."""
     if email_addr in _token_cache:
         return _token_cache[email_addr]
-
     url = f"{WORKER_URL}/api/token?email={urllib.parse.quote(email_addr)}"
     headers = {"Authorization": f"Bearer {WORKER_TOKEN}", "User-Agent": "gmail-migrate/1.0"}
     if CF_ACCESS_ID:
         headers["CF-Access-Client-Id"] = CF_ACCESS_ID
         headers["CF-Access-Client-Secret"] = CF_ACCESS_SECRET
     req = urllib.request.Request(url, headers=headers)
-
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
@@ -111,12 +110,10 @@ def get_token(email_addr):
         body = e.read().decode() if e.fp else str(e)
         log(f"FATAL: token fetch failed for {email_addr}: {e.code} {body}")
         sys.exit(1)
-
     token = data.get("access_token")
     if not token:
         log(f"FATAL: no token in response for {email_addr}: {data}")
         sys.exit(1)
-
     _token_cache[email_addr] = token
     return token
 
@@ -128,10 +125,8 @@ def get_dest_token():
 
 # ── Gmail API ──
 def gmail_api(token, path, method="GET", body=None, content_type="application/json"):
-    """Call Gmail API. Returns parsed JSON or raw bytes."""
     url = GMAIL_API + path
     headers = {"Authorization": f"Bearer {token}", "User-Agent": "gmail-migrate/1.0"}
-
     data = None
     if body is not None:
         if isinstance(body, str):
@@ -142,21 +137,17 @@ def gmail_api(token, path, method="GET", body=None, content_type="application/js
             data = json.dumps(body).encode("utf-8")
         if content_type:
             headers["Content-Type"] = content_type
-
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 raw = resp.read()
-                # Try JSON parse
                 try:
                     return json.loads(raw)
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     return raw
         except urllib.error.HTTPError as e:
             if e.code == 401 and attempt < 2:
-                # Token expired — clear cache and retry
                 log(f"  401 on {path}, refreshing token (attempt {attempt+1})")
                 if token == get_source_token():
                     _token_cache.pop(SOURCE_USER, None)
@@ -181,34 +172,23 @@ def gmail_api(token, path, method="GET", body=None, content_type="application/js
                 time.sleep(wait)
                 continue
             raise
-
     raise RuntimeError(f"Gmail API {method} {path}: failed after 3 attempts")
 
 # ── Gmail Operations ──
 def list_labels(token):
-    """List all labels, returns {name: id} dict."""
     data = gmail_api(token, "/labels")
-    result = {}
-    for label in data.get("labels", []):
-        result[label["name"]] = label["id"]
-    return result
+    return {label["name"]: label["id"] for label in data.get("labels", [])}
 
 def list_messages(token, query="", max_results=500, page_token=None):
-    """
-    List messages matching a query. Returns list of {id, threadId}.
-    query uses Gmail search syntax: https://support.google.com/mail/answer/7190
-    """
     path = f"/messages?maxResults={min(max_results, 500)}"
     if query:
         path += f"&q={urllib.parse.quote(query)}"
     if page_token:
         path += f"&pageToken={urllib.parse.quote(page_token)}"
-
     data = gmail_api(token, path)
     return data.get("messages", []), data.get("nextPageToken")
 
 def list_all_messages(token, query="", max_results=0):
-    """List all messages matching query, paginating automatically."""
     all_msgs = []
     page_token = None
     while True:
@@ -224,7 +204,6 @@ def list_all_messages(token, query="", max_results=0):
     return all_msgs
 
 def get_message_raw(token, msg_id):
-    """Get full message as raw RFC 2822 bytes."""
     data = gmail_api(token, f"/messages/{msg_id}?format=raw")
     if isinstance(data, dict):
         raw_b64 = data.get("raw", "")
@@ -232,24 +211,20 @@ def get_message_raw(token, msg_id):
             return base64.urlsafe_b64decode(raw_b64)
     return None
 
-def get_message_metadata(token, msg_id):
-    """Get message metadata (headers, labelIds, sizeEstimate)."""
-    return gmail_api(token, f"/messages/{msg_id}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=Subject")
-
 def import_message(token, raw_bytes, label_ids=None):
-    """
-    Import a raw RFC 2822 message. This is the Gmail API equivalent of IMAP APPEND.
-    Returns the created message dict.
-    """
+    """Import raw RFC 2822 message. Preserves original delivery timestamp."""
     raw_b64 = base64.urlsafe_b64encode(raw_bytes).decode("ascii")
     body = {"raw": raw_b64}
     if label_ids:
         body["labelIds"] = label_ids
-
-    return gmail_api(token, "/messages/import?neverMarkSpam=true", method="POST", body=body)
+    return gmail_api(
+        token,
+        "/messages/import?neverMarkSpam=true&internalDateSource=dateHeader",
+        method="POST",
+        body=body
+    )
 
 def get_message_id_from_raw(raw_bytes):
-    """Extract Message-ID header from raw RFC 2822 bytes."""
     try:
         msg = email.message_from_bytes(raw_bytes)
         return msg.get("Message-ID", "")
@@ -257,21 +232,15 @@ def get_message_id_from_raw(raw_bytes):
         return ""
 
 def search_by_message_id(token, message_id):
-    """Search for a message by Message-ID header. Returns message ID or None."""
     if not message_id:
         return None
-    # Gmail search syntax: rfc822msgid:<message-id>
     escaped = message_id.replace('"', '\\"')
     msgs, _ = list_messages(token, query=f'rfc822msgid:{escaped}', max_results=1)
-    if msgs:
-        return msgs[0]["id"]
-    return None
+    return msgs[0]["id"] if msgs else None
 
 def create_label(token, name, labels_cache):
-    """Create a label if it doesn't exist. Returns label ID."""
     if name in labels_cache:
         return labels_cache[name]
-
     try:
         result = gmail_api(token, "/labels", method="POST", body={
             "name": name,
@@ -282,7 +251,6 @@ def create_label(token, name, labels_cache):
         return result["id"]
     except RuntimeError as e:
         if "409" in str(e) or "ALREADY_EXISTS" in str(e):
-            # Refresh labels cache
             labels_cache.clear()
             labels_cache.update(list_labels(token))
             return labels_cache.get(name)
@@ -321,27 +289,17 @@ def get_folder_state(state, folder):
     return fs.setdefault(folder, {"copied": 0, "bytes": 0, "skipped": 0, "last_msg_id": None, "completed": False})
 
 # ── Folder Mapping ──
-# Gmail API uses label names. Source labels map to destination labels with G- prefix.
 SKIP_LABELS = {"SPAM", "TRASH"}
 
 def gmail_query_for_folder(folder):
-    """Convert a folder/label name to a Gmail search query."""
-    if folder == "INBOX":
-        return "in:inbox"
-    elif folder == "SENT":
-        return "in:sent"
-    elif folder == "DRAFT":
-        return "in:draft"
-    elif folder == "STARRED":
-        return "in:starred"
-    elif folder.startswith("CATEGORY_"):
-        return f"in:{folder.replace('CATEGORY_', '').lower()}"
-    else:
-        # Custom label
-        return f'label:"{folder}"'
+    if folder == "INBOX": return "in:inbox"
+    elif folder == "SENT": return "in:sent"
+    elif folder == "DRAFT": return "in:draft"
+    elif folder == "STARRED": return "in:starred"
+    elif folder.startswith("CATEGORY_"): return f"in:{folder.replace('CATEGORY_', '').lower()}"
+    else: return f'label:"{folder}"'
 
 def dest_label_name(src_label):
-    """Map source label to destination label with G- prefix."""
     return f"G-{SOURCE_USER}/{src_label}"
 
 # ── Main Copy Logic ──
@@ -353,7 +311,6 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
     folder_st = get_folder_state(state, src_folder)
     dest_label = dest_label_name(src_folder)
 
-    # Ensure destination label exists
     dst_labels = {}
     try:
         dst_labels = list_labels(dst_token)
@@ -361,7 +318,6 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
     except Exception as e:
         log(f"  Warning: couldn't create dest label {dest_label}: {e}")
 
-    # List messages in source folder
     query = gmail_query_for_folder(src_folder)
     log(f"  Query: {query}")
 
@@ -375,31 +331,41 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
     copied = 0
     total_bytes = 0
     skipped = 0
+    reached_limit = False
+    had_fatal_error = False
+    error_count = 0
+
     last_msg_id = folder_st.get("last_msg_id")
     resume = last_msg_id is not None
 
+    # Safety: if resume anchor is gone (message deleted/moved since last run),
+    # fall back to full scan with dedup rather than silently skipping all messages.
+    if resume and not any(m.get("id") == last_msg_id for m in messages):
+        log(f"  Resume anchor not found for {src_folder}; running full scan for safety")
+        resume = False
+
     batch_start = time.time()
     batch_copied = 0
+    last_processed_msg_id = None
 
     for msg_ref in messages:
         msg_id = msg_ref["id"]
 
-        # Resume: skip until we pass last_msg_id
         if resume:
             if msg_id == last_msg_id:
                 resume = False
             continue
 
-        # Check limits
         if limit_emails and copied >= limit_emails:
             log(f"  Email limit ({limit_emails}) reached")
+            reached_limit = True
             break
         if limit_bytes and total_bytes >= limit_bytes:
             log(f"  Size limit ({bytes_human(limit_bytes)}) reached")
+            reached_limit = True
             break
 
         try:
-            # Get raw message from source
             raw = get_message_raw(src_token, msg_id)
             if raw is None:
                 skipped += 1
@@ -408,7 +374,6 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
 
             msg_size = len(raw)
 
-            # Dedup check
             if not SKIP_DEDUP:
                 msg_id_header = get_message_id_from_raw(raw)
                 if msg_id_header:
@@ -418,7 +383,6 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
                         batch_copied += 1
                         continue
 
-            # Import to destination
             if not DRY_RUN:
                 dest_label_ids = [dst_labels.get(dest_label)] if dest_label in dst_labels else []
                 import_message(dst_token, raw, label_ids=[lid for lid in dest_label_ids if lid])
@@ -426,26 +390,21 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
             copied += 1
             total_bytes += msg_size
             batch_copied += 1
+            last_processed_msg_id = msg_id
 
-            # Batch progress
             if batch_copied >= BATCH_SIZE:
                 elapsed = time.time() - batch_start
                 rate = (batch_copied / elapsed * 60) if elapsed > 0 else 0
                 log(f"[BATCH] folder={src_folder} done={copied}/{total_in_folder} "
                     f"bytes={bytes_human(total_bytes)} {elapsed:.1f}s {rate:.1f} msg/min")
-
-                # Save state
                 folder_st["last_msg_id"] = msg_id
                 folder_st["copied"] = copied
                 folder_st["bytes"] = total_bytes
                 state["last_folder"] = src_folder
                 state["last_msg_id"] = msg_id
                 save_state(state)
-
                 batch_start = time.time()
                 batch_copied = 0
-
-                # Small sleep to respect rate limits
                 time.sleep(0.5)
 
         except RuntimeError as e:
@@ -456,6 +415,27 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
                 "error": str(e)[:200],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
+            error_count += 1
+
+            # Fatal: missing Gmail scope or persistent 403 — abort immediately
+            err_l = str(e).lower()
+            if ("insufficient authentication scopes" in err_l or
+                    (" 403 " in f" {err_l} " and "/messages/" in err_l)):
+                had_fatal_error = True
+                save_state(state)
+                raise RuntimeError(
+                    f"Fatal API permission error in {src_folder}. "
+                    "Re-auth source account with required Gmail scopes and retry."
+                ) from e
+
+            # Too many per-message errors — abort folder
+            if error_count >= 25:
+                had_fatal_error = True
+                save_state(state)
+                raise RuntimeError(
+                    f"Aborting folder {src_folder}: too many message-level errors ({error_count})."
+                ) from e
+
             skipped += 1
 
     # Final batch flush
@@ -465,18 +445,23 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
         log(f"[BATCH] folder={src_folder} done={copied}/{total_in_folder} "
             f"bytes={bytes_human(total_bytes)} {elapsed:.1f}s {rate:.1f} msg/min")
 
-    # Mark folder complete
+    # Only mark complete if we processed the whole folder without hitting a limit.
+    # If a limit was hit, preserve the progress anchor for safe resume next run.
     completed = state.get("completed_folders", [])
-    if src_folder not in completed:
-        completed.append(src_folder)
-        state["completed_folders"] = completed
+    if not reached_limit and not had_fatal_error:
+        if src_folder not in completed:
+            completed.append(src_folder)
+            state["completed_folders"] = completed
+        folder_st["completed"] = True
+        folder_st["last_msg_id"] = messages[-1]["id"] if messages else folder_st.get("last_msg_id")
+    else:
+        folder_st["completed"] = False
+        if last_processed_msg_id:
+            folder_st["last_msg_id"] = last_processed_msg_id
 
-    folder_st["completed"] = True
-    folder_st["last_msg_id"] = messages[-1]["id"] if messages else folder_st.get("last_msg_id")
     folder_st["copied"] = copied
     folder_st["bytes"] = total_bytes
     folder_st["skipped"] = skipped
-
     state["processed_emails"] = state.get("processed_emails", 0) + copied
     state["processed_bytes"] = state.get("processed_bytes", 0) + total_bytes
     state["last_folder"] = src_folder
@@ -485,35 +470,25 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
     return copied, total_bytes, skipped
 
 # ── Milestone notifications ──
-def _check_milestones(folder, total_emails, total_bytes, last_email_milestone, last_mb_milestone):
-    """Fire ntfy notifications when email/MB milestones are crossed. Returns updated milestone counters."""
-    new_email_milestone = last_email_milestone
-    new_mb_milestone = last_mb_milestone
-
+def _check_milestones(folder, total_emails, total_bytes, last_email_ms, last_mb_ms):
+    new_email_ms = last_email_ms
+    new_mb_ms = last_mb_ms
     if NTFY_EMAIL_MILESTONE > 0:
         curr = total_emails // NTFY_EMAIL_MILESTONE
-        if curr > last_email_milestone:
-            notify(
-                f"📧 {total_emails:,} emails migrated [{DEST_ID}]",
-                f"Folder: {folder}\nSize: {bytes_human(total_bytes)}",
-            )
-            new_email_milestone = curr
-
+        if curr > last_email_ms:
+            notify(f"\U0001f4e7 {total_emails:,} emails migrated [{DEST_ID}]",
+                   f"Folder: {folder}\nSize: {bytes_human(total_bytes)}")
+            new_email_ms = curr
     if NTFY_MB_MILESTONE > 0:
         curr = total_bytes // NTFY_MB_MILESTONE
-        if curr > last_mb_milestone:
-            notify(
-                f"💾 {bytes_human(total_bytes)} migrated [{DEST_ID}]",
-                f"Folder: {folder}\nEmails: {total_emails:,}",
-            )
-            new_mb_milestone = curr
-
-    return new_email_milestone, new_mb_milestone
+        if curr > last_mb_ms:
+            notify(f"\U0001f4be {bytes_human(total_bytes)} migrated [{DEST_ID}]",
+                   f"Folder: {folder}\nEmails: {total_emails:,}")
+            new_mb_ms = curr
+    return new_email_ms, new_mb_ms
 
 # ── Main ──
 def main():
-    import urllib.parse  # needed for get_token
-
     log("=" * 60)
     log("Gmail API Migrator (via CF Worker tokens)")
     log("=" * 60)
@@ -528,7 +503,7 @@ def main():
     if FOLDERS_FILTER:
         log(f"Folders:     {', '.join(sorted(FOLDERS_FILTER))}")
     if NTFY_URL:
-        log(f"ntfy:        enabled (email milestone={NTFY_EMAIL_MILESTONE}, mb milestone={NTFY_MB_MILESTONE // (1024*1024)})")
+        log(f"ntfy:        enabled (email={NTFY_EMAIL_MILESTONE}, mb={NTFY_MB_MILESTONE//(1024*1024)})")
     log("")
 
     state = load_state()
@@ -541,54 +516,39 @@ def main():
     total_copied = 0
     total_bytes = 0
     total_skipped = 0
-    _notified_email_milestone = 0
-    _notified_mb_milestone = 0
+    _notified_email_ms = 0
+    _notified_mb_ms = 0
 
     try:
-        # Verify tokens work
         src_token = get_source_token()
         dst_token = get_dest_token()
-        log("✅ Tokens acquired from CF Worker")
-        notify(
-            f"Migration started [{DEST_ID}]",
-            f"Strategy: {STRATEGY}\n{SOURCE_USER} → {DEST_USER}\nDry run: {DRY_RUN}",
-        )
+        log("\u2705 Tokens acquired from CF Worker")
+        notify(f"Migration started [{DEST_ID}]",
+               f"Strategy: {STRATEGY}\n{SOURCE_USER} \u2192 {DEST_USER}\nDry run: {DRY_RUN}")
 
         if STRATEGY == "folder":
             copied, bts, skipped = copy_messages(
                 src_token, dst_token, FOLDER, state,
                 limit_bytes=SIZE_LIMIT, limit_emails=EMAIL_LIMIT
             )
-            total_copied += copied
-            total_bytes += bts
-            total_skipped += skipped
-            _notified_email_milestone, _notified_mb_milestone = _check_milestones(
-                FOLDER, total_copied, total_bytes,
-                _notified_email_milestone, _notified_mb_milestone
-            )
+            total_copied += copied; total_bytes += bts; total_skipped += skipped
+            _notified_email_ms, _notified_mb_ms = _check_milestones(
+                FOLDER, total_copied, total_bytes, _notified_email_ms, _notified_mb_ms)
 
         elif STRATEGY == "size":
-            # Get source labels (folders)
             src_labels = list_labels(src_token)
             log(f"Found {len(src_labels)} source labels")
 
             remaining_bytes = SIZE_LIMIT
-            # Process in priority: custom labels first, then system
-            priority_order = []
             system_labels = {"INBOX", "SENT", "DRAFT", "STARRED", "IMPORTANT",
-                           "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
-                           "CATEGORY_UPDATES", "CATEGORY_FORUMS"}
-
+                             "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
+                             "CATEGORY_UPDATES", "CATEGORY_FORUMS"}
+            priority_order = []
             for name in sorted(src_labels.keys()):
-                if name in SKIP_LABELS:
-                    continue
-                if name in system_labels:
-                    continue
-                priority_order.append(name)
+                if name not in SKIP_LABELS and name not in system_labels:
+                    priority_order.append(name)
             for name in sorted(src_labels.keys()):
-                if name in SKIP_LABELS:
-                    continue
-                if name in system_labels and name not in [l for l in priority_order]:
+                if name not in SKIP_LABELS and name in system_labels:
                     priority_order.append(name)
 
             log(f"Processing {len(priority_order)} folders")
@@ -597,7 +557,6 @@ def main():
                 if FOLDERS_FILTER and folder not in FOLDERS_FILTER:
                     log(f"  Skipping (not in MIGRATION_FOLDERS filter): {folder}")
                     continue
-
                 folder_st = get_folder_state(state, folder)
                 if folder_st.get("completed") and folder in state.get("completed_folders", []):
                     log(f"  Skipping completed: {folder}")
@@ -608,25 +567,18 @@ def main():
 
                 log(f"\n--- Folder: {folder} ---")
                 copied, bts, skipped = copy_messages(
-                    src_token, dst_token, folder, state,
-                    limit_bytes=remaining_bytes
-                )
-                total_copied += copied
-                total_bytes += bts
-                total_skipped += skipped
+                    src_token, dst_token, folder, state, limit_bytes=remaining_bytes)
+                total_copied += copied; total_bytes += bts; total_skipped += skipped
                 remaining_bytes -= bts
-                _notified_email_milestone, _notified_mb_milestone = _check_milestones(
-                    folder, total_copied, total_bytes,
-                    _notified_email_milestone, _notified_mb_milestone
-                )
+                _notified_email_ms, _notified_mb_ms = _check_milestones(
+                    folder, total_copied, total_bytes, _notified_email_ms, _notified_mb_ms)
 
         elif STRATEGY == "random":
+            import random
             query = gmail_query_for_folder(FOLDER)
             messages = list_all_messages(src_token, query=query)
-            import random
             sample = random.sample(messages, min(SAMPLE_SIZE, len(messages)))
             log(f"Random sample: {len(sample)} from {len(messages)}")
-
             for msg_ref in sample:
                 raw = get_message_raw(src_token, msg_ref["id"])
                 if raw:
@@ -637,12 +589,10 @@ def main():
 
         state["status"] = "completed" if not DRY_RUN else "dry-run"
         save_state(state)
-        notify(
-            f"Migration {'dry-run ' if DRY_RUN else ''}complete [{DEST_ID}]",
-            f"Copied: {total_copied} messages ({bytes_human(total_bytes)})\n"
-            f"Skipped: {total_skipped}\nErrors: {len(state.get('errors', []))}",
-            priority="high",
-        )
+        notify(f"Migration {'dry-run ' if DRY_RUN else ''}complete [{DEST_ID}]",
+               f"Copied: {total_copied} ({bytes_human(total_bytes)})\n"
+               f"Skipped: {total_skipped}\nErrors: {len(state.get('errors', []))}",
+               priority="high")
 
     except KeyboardInterrupt:
         log("Interrupted — saving state")
