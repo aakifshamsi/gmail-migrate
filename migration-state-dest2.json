@@ -3,13 +3,13 @@
   "source_account": "REDACTED",
   "destination": "dest1",
   "strategy": "size",
-  "processed_emails": 3853,
-  "processed_bytes": 493661290,
+  "processed_emails": 3854,
+  "processed_bytes": 493664190,
   "last_uid": null,
-  "last_folder": "STARRED",
+  "last_folder": "to do",
   "status": "completed",
   "started_at": "2026-03-29T21:02:02.327144+00:00",
-  "updated_at": "2026-03-30T07:20:04.662625+00:00",
+  "updated_at": "2026-03-30T10:57:15.516769+00:00",
   "target_emails": 0,
   "target_bytes": 0,
   "errors": [
@@ -38153,11 +38153,11 @@
       "completed": false
     },
     "to do": {
-      "copied": 0,
-      "bytes": 0,
+      "copied": 1,
+      "bytes": 2900,
       "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "last_msg_id": "139a0d8d7bb0ccee",
+      "completed": true
     },
     "virus": {
       "copied": 0,
@@ -38267,7 +38267,8 @@
     "IMPORTANT",
     "INBOX",
     "SENT",
-    "STARRED"
+    "STARRED",
+    "to do"
   ],
   "last_msg_id": "18bcfe56a6d8cd39"
 }
