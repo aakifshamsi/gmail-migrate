@@ -1,1 +1,40 @@
 @import "tailwindcss";
+
+/* ── Light theme overrides ── */
+html.light {
+  color-scheme: light;
+}
+html.light body {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+html.light .bg-gray-950 { background-color: #f1f5f9 !important; }
+html.light .bg-gray-900 { background-color: #ffffff !important; }
+html.light .bg-gray-800 { background-color: #f8fafc !important; }
+html.light .bg-gray-800\/30 { background-color: rgba(248,250,252,0.8) !important; }
+html.light .bg-gray-800\/40 { background-color: rgba(241,245,249,0.6) !important; }
+html.light .border-gray-800 { border-color: #e2e8f0 !important; }
+html.light .border-gray-800\/40 { border-color: rgba(226,232,240,0.5) !important; }
+html.light .border-gray-700 { border-color: #cbd5e1 !important; }
+html.light .divide-gray-800\/40 > * + * { border-color: rgba(226,232,240,0.5) !important; }
+html.light .text-white  { color: #0f172a !important; }
+html.light .text-gray-100 { color: #0f172a !important; }
+html.light .text-gray-200 { color: #1e293b !important; }
+html.light .text-gray-300 { color: #334155 !important; }
+html.light .text-gray-400 { color: #475569 !important; }
+html.light .text-gray-500 { color: #64748b !important; }
+html.light .text-gray-600 { color: #94a3b8 !important; }
+html.light .text-gray-700 { color: #94a3b8 !important; }
+html.light .hover\:bg-gray-700:hover { background-color: #e2e8f0 !important; }
+html.light .hover\:bg-gray-800:hover { background-color: #f1f5f9 !important; }
+html.light .hover\:bg-gray-800\/40:hover { background-color: rgba(226,232,240,0.6) !important; }
+html.light .bg-slate-950 { background-color: #f8fafc !important; }
+html.light .bg-slate-900 { background-color: #ffffff !important; }
+html.light .bg-slate-900\/80 { background-color: rgba(255,255,255,0.9) !important; }
+html.light .border-slate-800 { border-color: #e2e8f0 !important; }
+html.light .text-slate-100 { color: #0f172a !important; }
+html.light .text-slate-300 { color: #334155 !important; }
+html.light .text-slate-400 { color: #64748b !important; }
+html.light .bg-slate-950 input,
+html.light .bg-gray-800 input,
+html.light .bg-gray-800 select { background-color: #f1f5f9 !important; color: #0f172a !important; }
