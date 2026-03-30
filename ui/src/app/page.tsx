@@ -22,6 +22,16 @@ interface RunStatus {
   completed_folders: number;
 }
 interface StatusData { dest1: RunStatus | null; dest2: RunStatus | null; }
+interface Job {
+  id: number;
+  name: string;
+  status: string;       // queued | in_progress | completed
+  conclusion: string | null;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  display_title: string;
+}
 
 function bytesHuman(n: number): string {
   if (!n) return "0 B";
@@ -79,12 +89,15 @@ export default function Home() {
 
   const [data, setData] = useState<FoldersData | null>(null);
   const [status, setStatus] = useState<StatusData | null>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [loadingF, setLoadingF] = useState(false);
   const [loadingS, setLoadingS] = useState(true);
+  const [loadingJ, setLoadingJ] = useState(false);
   const [errF, setErrF] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dispatching, setDispatching] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [jobAction, setJobAction] = useState<number | null>(null);
 
   // controls
   const [strategy, setStrategy] = useState("size");
@@ -98,7 +111,8 @@ export default function Home() {
   const [ntfyMb, setNtfyMb] = useState(50);
   const [adv, setAdv] = useState(false);
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const jobPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch connected accounts from CF Worker (via proxy)
   useEffect(() => {
@@ -135,15 +149,42 @@ export default function Home() {
     finally { setLoadingS(false); }
   }, []);
 
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+  const fetchJobs = useCallback(async () => {
+    setLoadingJ(true);
+    try {
+      const r = await fetch("/api/jobs");
+      if (r.ok) setJobs(await r.json());
+    } catch { /* silent */ }
+    finally { setLoadingJ(false); }
+  }, []);
+
+  const doJobAction = async (runId: number, action: "cancel" | "rerun") => {
+    setJobAction(runId);
+    try {
+      await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId, action }) });
+      setTimeout(fetchJobs, 2_000);
+    } finally { setJobAction(null); }
+  };
+
+  useEffect(() => { fetchStatus(); fetchJobs(); }, [fetchStatus, fetchJobs]);
   useEffect(() => { if (srcAcc) fetchFolders(); }, [srcAcc, d1Acc, d2Acc, fetchFolders]);
 
+  // Poll status while any run is active
   useEffect(() => {
     const running = status?.dest1?.status === "running" || status?.dest2?.status === "running";
-    if (running && !pollRef.current) pollRef.current = setInterval(fetchStatus, 30_000);
+    if (running && !pollRef.current) pollRef.current = setInterval(fetchStatus, 20_000);
     if (!running && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [status, fetchStatus]);
+
+  // Poll jobs while any job is queued/in_progress
+  useEffect(() => {
+    const active = jobs.some(j => j.status === "queued" || j.status === "in_progress");
+    if (active && !jobPollRef.current) jobPollRef.current = setInterval(() => { fetchJobs(); fetchStatus(); }, 15_000);
+    if (!active && jobPollRef.current) { clearInterval(jobPollRef.current); jobPollRef.current = null; }
+    return () => { if (jobPollRef.current) clearInterval(jobPollRef.current); };
+  }, [jobs, fetchJobs, fetchStatus]);
 
   const rows = data?.rows ?? [];
   const totalFolders = rows.length;
@@ -179,7 +220,10 @@ export default function Home() {
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
       setResult({ ok: true, msg: "Workflow dispatched!" });
-      setTimeout(fetchStatus, 6_000);
+      // Poll jobs immediately and aggressively until run appears
+      setTimeout(() => { fetchJobs(); fetchStatus(); }, 3_000);
+      setTimeout(() => { fetchJobs(); fetchStatus(); }, 8_000);
+      setTimeout(() => { fetchJobs(); fetchStatus(); }, 15_000);
     } catch (e) {
       setResult({ ok: false, msg: e instanceof Error ? e.message : String(e) });
     } finally { setDispatching(false); }
@@ -431,8 +475,75 @@ export default function Home() {
           })}
 
           {(status?.dest1?.status === "running" || status?.dest2?.status === "running") && (
-            <p className="text-xs text-blue-400">● Live — auto-refreshing every 30s</p>
+            <p className="text-xs text-blue-400">● Live — auto-refreshing every 20s</p>
           )}
+        </div>
+      </div>
+
+      {/* Jobs Panel */}
+      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            GitHub Actions Jobs
+            {jobs.some(j => j.status !== "completed") && (
+              <span className="ml-2 text-blue-400">● Live</span>
+            )}
+          </h2>
+          <button onClick={fetchJobs} disabled={loadingJ}
+            className="text-xs text-gray-700 hover:text-gray-400 disabled:opacity-50">
+            {loadingJ ? "…" : "↻ Refresh"}
+          </button>
+        </div>
+
+        {jobs.length === 0 && !loadingJ && (
+          <p className="text-sm text-gray-700">No recent runs found.</p>
+        )}
+
+        <div className="space-y-2">
+          {jobs.slice(0, 8).map(job => {
+            const isActive = job.status === "queued" || job.status === "in_progress";
+            const statusColor =
+              job.status === "in_progress" ? "text-blue-400" :
+              job.status === "queued"      ? "text-amber-400" :
+              job.conclusion === "success" ? "text-emerald-400" :
+              job.conclusion === "failure" ? "text-red-400" :
+              job.conclusion === "cancelled" ? "text-gray-500" : "text-gray-500";
+            const statusLabel =
+              job.status === "in_progress" ? "● running" :
+              job.status === "queued"      ? "◌ queued" :
+              job.conclusion ?? job.status;
+
+            return (
+              <div key={job.id} className="flex items-center gap-3 rounded-lg border border-gray-800 bg-gray-800/30 px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <a href={job.html_url} target="_blank" rel="noopener noreferrer"
+                    className="text-sm text-gray-200 hover:text-white truncate block">
+                    {job.display_title}
+                  </a>
+                  <p className="text-xs text-gray-600">
+                    {new Date(job.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <span className={`text-xs font-medium shrink-0 ${statusColor}`}>{statusLabel}</span>
+                <div className="flex gap-1.5 shrink-0">
+                  {isActive && (
+                    <button onClick={() => doJobAction(job.id, "cancel")}
+                      disabled={jobAction === job.id}
+                      className="px-2 py-1 text-xs rounded border border-red-800/60 text-red-400 hover:bg-red-900/20 disabled:opacity-50">
+                      Cancel
+                    </button>
+                  )}
+                  {job.status === "completed" && job.conclusion === "failure" && (
+                    <button onClick={() => doJobAction(job.id, "rerun")}
+                      disabled={jobAction === job.id}
+                      className="px-2 py-1 text-xs rounded border border-amber-800/60 text-amber-400 hover:bg-amber-900/20 disabled:opacity-50">
+                      Re-run
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
