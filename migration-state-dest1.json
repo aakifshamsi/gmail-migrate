@@ -68,15 +68,14 @@
       "bytes": 6182647,
       "skipped": 0,
       "last_msg_id": "137a26203b6f57ce",
-      "completed": true
+      "completed": false
     }
   },
   "completed_folders": [
     "CHAT",
     "Cash Cafe",
     "Digital Hands",
-    "Digital Hands/TMF Update",
-    "tut"
+    "Digital Hands/TMF Update"
   ],
   "last_msg_id": "168c8358cad260d9"
 }
