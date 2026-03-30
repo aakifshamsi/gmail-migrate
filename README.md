@@ -94,6 +94,10 @@ A deployment workflow now exists at `.github/workflows/deploy-worker.yml`.
 - Manual deploy via **Actions → Deploy Cloudflare Worker → Run workflow**.
 - Runs: `npx wrangler@4 deploy --config wrangler.jsonc`
 
+## Vercel note
+
+This repository is a Cloudflare Worker + scripts project (not a Next.js app). If connected to Vercel, set framework preset to **Other** or disable auto-deploy hooks to avoid false Next.js build errors.
+
 ## Prompt for a fresh ChatGPT Codex environment
 
 If you start a new Codex task/environment, paste this:

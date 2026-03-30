@@ -149,6 +149,9 @@ export default {
           return Response.json({error: "Invalid JSON body"}, {status: 400});
         }
         if (!body.email) return Response.json({error: "Missing email"}, {status: 400});
+        if (isReservedKey(body.email)) {
+          return Response.json({error: "Cannot remove reserved key"}, {status: 400});
+        }
 
         await env.TOKENS.delete(body.email);
         if (githubBackupConfigured(env)) {

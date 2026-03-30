@@ -77,14 +77,18 @@ async function githubBackupRead(env){
 
 async function githubBackupWrite(env, sha, data, message){
   const url = GH_API + "/repos/" + env.GH_BACKUP_REPO + "/contents/" + env.GH_BACKUP_PATH;
-  const body = {
-    message,
-    content: btoa(JSON.stringify(data, null, 2)),
-    branch: env.GH_BACKUP_BRANCH || "main"
+  const buildBody = function(currentSha){
+    const out = {
+      message,
+      content: btoa(JSON.stringify(data, null, 2)),
+      branch: env.GH_BACKUP_BRANCH || "main"
+    };
+    if (currentSha) out.sha = currentSha;
+    return out;
   };
-  if (sha) body.sha = sha;
+  let body = buildBody(sha);
 
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     method: "PUT",
     headers: {
       Authorization: "Bearer " + env.GH_BACKUP_TOKEN,
@@ -94,6 +98,21 @@ async function githubBackupWrite(env, sha, data, message){
     },
     body: JSON.stringify(body)
   });
+
+  if ((res.status === 409 || res.status === 422) && sha) {
+    const latest = await githubBackupRead(env);
+    body = buildBody(latest && latest.sha ? latest.sha : null);
+    res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer " + env.GH_BACKUP_TOKEN,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "User-Agent": "gmail-token-vault-worker"
+      },
+      body: JSON.stringify(body)
+    });
+  }
 
   if (!res.ok) {
     const text = await res.text();
