@@ -44,12 +44,14 @@ async function batchDetails(token: string, labels: GLabel[], chunkSize = 15): Pr
   return out;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
   const workerUrl = process.env.WORKER_URL?.replace(/\/$/, "");
   const workerToken = process.env.WORKER_AUTH_TOKEN;
-  const sourceUser = process.env.GMAIL_SOURCE_USER;
-  const dest1User = process.env.GMAIL_DEST1_USER ?? null;
-  const dest2User = process.env.GMAIL_DEST2_USER ?? null;
+  // Prefer query params (set by UI); fall back to env vars for CI/scripted use
+  const sourceUser = searchParams.get("source") ?? process.env.GMAIL_SOURCE_USER;
+  const dest1User  = searchParams.get("dest1")  ?? null;
+  const dest2User  = searchParams.get("dest2")  ?? null;
 
   if (!workerUrl || !workerToken || !sourceUser) {
     return NextResponse.json(

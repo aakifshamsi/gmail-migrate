@@ -32,13 +32,13 @@ function bytesHuman(n: number): string {
 }
 
 function mirrorCell(g1: number, gn: number) {
-  if (g1 === 0) return { icon: "\u2B1C", label: "\u2014", cls: "text-gray-700" };
-  if (gn >= g1)  return { icon: "\u2705", label: gn.toLocaleString(), cls: "text-emerald-400" };
+  if (g1 === 0) return { icon: "⬜", label: "—", cls: "text-gray-700" };
+  if (gn >= g1)  return { icon: "✅", label: gn.toLocaleString(), cls: "text-emerald-400" };
   if (gn > 0) {
     const pct = Math.round((gn / g1) * 100);
-    return { icon: "\uD83D\uDD04", label: `${pct}%`, cls: "text-amber-400" };
+    return { icon: "🔄", label: `${pct}%`, cls: "text-amber-400" };
   }
-  return { icon: "\u2B1C", label: "\u2014", cls: "text-gray-600" };
+  return { icon: "⬜", label: "—", cls: "text-gray-600" };
 }
 
 function statusBadge(s: string) {
@@ -58,10 +58,28 @@ function ProgressBar({ pct }: { pct: number }) {
   );
 }
 
+function Select({ value, onChange, options, placeholder }: {
+  value: string; onChange: (v: string) => void;
+  options: string[]; placeholder?: string;
+}) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)}
+      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-100 focus:outline-none">
+      {placeholder && <option value="">{placeholder}</option>}
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+
 export default function Home() {
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [srcAcc, setSrcAcc] = useState("");
+  const [d1Acc, setD1Acc] = useState("");
+  const [d2Acc, setD2Acc] = useState("");
+
   const [data, setData] = useState<FoldersData | null>(null);
   const [status, setStatus] = useState<StatusData | null>(null);
-  const [loadingF, setLoadingF] = useState(true);
+  const [loadingF, setLoadingF] = useState(false);
   const [loadingS, setLoadingS] = useState(true);
   const [errF, setErrF] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -69,8 +87,6 @@ export default function Home() {
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // controls
-  const [destG2, setDestG2] = useState(true);
-  const [destG3, setDestG3] = useState(true);
   const [strategy, setStrategy] = useState("size");
   const [sizeMb, setSizeMb] = useState(500);
   const [emailLim, setEmailLim] = useState(0);
@@ -84,16 +100,31 @@ export default function Home() {
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Fetch connected accounts from CF Worker (via proxy)
+  useEffect(() => {
+    fetch("/api/accounts").then(r => r.json()).then((accts: string[]) => {
+      if (!Array.isArray(accts)) return;
+      setAccounts(accts);
+      if (accts[0]) setSrcAcc(accts[0]);
+      if (accts[1]) setD1Acc(accts[1]);
+      if (accts[2]) setD2Acc(accts[2]);
+    }).catch(() => {});
+  }, []);
+
   const fetchFolders = useCallback(async () => {
+    if (!srcAcc) return;
     setLoadingF(true); setErrF(null);
     try {
-      const r = await fetch("/api/folders");
+      const params = new URLSearchParams({ source: srcAcc });
+      if (d1Acc) params.set("dest1", d1Acc);
+      if (d2Acc) params.set("dest2", d2Acc);
+      const r = await fetch(`/api/folders?${params}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
       setData(j);
     } catch (e) { setErrF(e instanceof Error ? e.message : String(e)); }
     finally { setLoadingF(false); }
-  }, []);
+  }, [srcAcc, d1Acc, d2Acc]);
 
   const fetchStatus = useCallback(async () => {
     setLoadingS(true);
@@ -104,9 +135,9 @@ export default function Home() {
     finally { setLoadingS(false); }
   }, []);
 
-  useEffect(() => { fetchFolders(); fetchStatus(); }, [fetchFolders, fetchStatus]);
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+  useEffect(() => { if (srcAcc) fetchFolders(); }, [srcAcc, d1Acc, d2Acc, fetchFolders]);
 
-  // auto-refresh status while a run is active
   useEffect(() => {
     const running = status?.dest1?.status === "running" || status?.dest2?.status === "running";
     if (running && !pollRef.current) pollRef.current = setInterval(fetchStatus, 30_000);
@@ -122,10 +153,11 @@ export default function Home() {
   const selRows = rows.filter(r => selected.has(r.name));
   const selEmails = selRows.reduce((a, r) => a + r.g1Count, 0);
   const selBytes  = selRows.reduce((a, r) => a + r.estimatedBytes, 0);
-  const destination = destG2 && destG3 ? "both" : destG2 ? "dest1" : "dest2";
+
+  const destination = d1Acc && d2Acc ? "both" : d1Acc ? "dest1" : "dest2";
 
   const runMigration = async (dry: boolean) => {
-    if (!destG2 && !destG3) { setResult({ ok: false, msg: "Select at least one destination." }); return; }
+    if (!d1Acc && !d2Acc) { setResult({ ok: false, msg: "Select at least one destination account." }); return; }
     if (!dry && !confirm(
       `Copy ${selEmails > 0 ? selEmails.toLocaleString() + " emails" : "all emails"} to ${destination}?\n\nThis will dispatch a GitHub Actions workflow.`
     )) return;
@@ -153,10 +185,9 @@ export default function Home() {
     } finally { setDispatching(false); }
   };
 
-  const srcLabel = process.env.NEXT_PUBLIC_SOURCE_LABEL ?? "G1";
-  const d1Label  = process.env.NEXT_PUBLIC_DEST1_LABEL  ?? "G2";
-  const d2Label  = process.env.NEXT_PUBLIC_DEST2_LABEL  ?? "G3";
-  const ghRepo   = process.env.NEXT_PUBLIC_GITHUB_REPO  ?? "";
+  const ghRepo = process.env.NEXT_PUBLIC_GITHUB_REPO ?? "";
+
+  const otherAccounts = (exclude: string[]) => accounts.filter(a => !exclude.includes(a));
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
@@ -164,14 +195,39 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white">Gmail Migration Dashboard</h1>
-          <p className="text-xs text-gray-600 mt-0.5">
-            {data?.sourceUser ?? "\u2014"} \u2192 {data?.dest1User ?? "?"} + {data?.dest2User ?? "?"}
-          </p>
+          {accounts.length === 0 && (
+            <p className="text-xs text-red-400 mt-0.5">No accounts found — check CF Worker connection</p>
+          )}
         </div>
-        <button onClick={() => { fetchFolders(); fetchStatus(); }} disabled={loadingF}
+        <button onClick={() => { fetchFolders(); fetchStatus(); }} disabled={loadingF || !srcAcc}
           className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg disabled:opacity-50">
-          {loadingF ? "\u2026" : "\u21BB Refresh"}
+          {loadingF ? "…" : "↻ Refresh"}
         </button>
+      </div>
+
+      {/* Account selectors */}
+      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Accounts</p>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <p className="text-xs text-gray-600 mb-1">Source (G1)</p>
+            <Select value={srcAcc} onChange={setSrcAcc}
+              options={accounts} placeholder="— select —" />
+          </div>
+          <div>
+            <p className="text-xs text-gray-600 mb-1">Dest 1 (G2)</p>
+            <Select value={d1Acc} onChange={setD1Acc}
+              options={["", ...otherAccounts([srcAcc, d2Acc])]} placeholder="— none —" />
+          </div>
+          <div>
+            <p className="text-xs text-gray-600 mb-1">Dest 2 (G3)</p>
+            <Select value={d2Acc} onChange={setD2Acc}
+              options={["", ...otherAccounts([srcAcc, d1Acc])]} placeholder="— none —" />
+          </div>
+        </div>
+        {accounts.length > 0 && (
+          <p className="text-xs text-gray-700 mt-2">{accounts.length} account{accounts.length !== 1 ? "s" : ""} connected in CF Worker</p>
+        )}
       </div>
 
       {/* Folder comparison table */}
@@ -180,19 +236,20 @@ export default function Home() {
           <input type="checkbox" className="accent-blue-500"
             checked={selected.size === rows.length && rows.length > 0} onChange={toggleAll} />
           <span>Folder</span>
-          <span className="text-right">{srcLabel}</span>
-          <span className="text-right">{d1Label} Mirror</span>
-          <span className="text-right">{d2Label} Mirror</span>
+          <span className="text-right">G1</span>
+          <span className="text-right">{d1Acc ? d1Acc.split("@")[0] : "G2"} Mirror</span>
+          <span className="text-right">{d2Acc ? d2Acc.split("@")[0] : "G3"} Mirror</span>
         </div>
 
-        {loadingF && <p className="px-4 py-10 text-center text-sm text-gray-600">Fetching folders\u2026</p>}
+        {!srcAcc && <p className="px-4 py-10 text-center text-sm text-gray-600">Select a source account above.</p>}
+        {srcAcc && loadingF && <p className="px-4 py-10 text-center text-sm text-gray-600">Fetching folders…</p>}
         {errF && (
           <div className="px-4 py-6 text-center">
             <p className="text-red-400 text-sm font-mono">{errF}</p>
             <button onClick={fetchFolders} className="mt-2 text-xs text-gray-500 hover:text-white underline">Retry</button>
           </div>
         )}
-        {!loadingF && !errF && rows.length === 0 && (
+        {!loadingF && !errF && srcAcc && rows.length === 0 && (
           <p className="px-4 py-10 text-center text-sm text-gray-600">No folders found.</p>
         )}
 
@@ -219,12 +276,11 @@ export default function Home() {
         <div className="px-4 py-2 bg-gray-800/30 border-t border-gray-800 flex justify-between text-xs text-gray-600">
           <span>
             {selected.size > 0
-              ? `${selected.size} folder${selected.size > 1 ? "s" : ""} selected \u00b7 ${selEmails.toLocaleString()} msgs`
-              : "No selection \u2014 all folders will be migrated"}
+              ? `${selected.size} folder${selected.size > 1 ? "s" : ""} selected · ${selEmails.toLocaleString()} msgs`
+              : "No selection — all folders will be migrated"}
           </span>
-          {selected.size > 0 && <span className="text-emerald-400 font-medium">~{bytesHuman(selBytes)} est. recovery</span>}
+          {selected.size > 0 && <span className="text-emerald-400 font-medium">~{bytesHuman(selBytes)} est.</span>}
         </div>
-        <p className="px-4 py-1 text-xs text-gray-700 border-t border-gray-800/40">Size estimates based on 75 KB/message average.</p>
       </div>
 
       {/* Controls + Status */}
@@ -232,20 +288,6 @@ export default function Home() {
         {/* Migration Controls */}
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-3">
           <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Migration Controls</h2>
-
-          {/* Destination */}
-          <div>
-            <p className="text-xs text-gray-600 mb-1.5">Destination</p>
-            <div className="flex gap-5">
-              {[{ label: d1Label + " (dest1)", val: destG2, set: setDestG2 },
-                { label: d2Label + " (dest2)", val: destG3, set: setDestG3 }].map(d => (
-                <label key={d.label} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={d.val} onChange={e => d.set(e.target.checked)} className="accent-blue-500" />
-                  <span className={d.val ? "text-white" : "text-gray-600"}>{d.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
 
           {/* Strategy / Size / Batch */}
           <div className="grid grid-cols-3 gap-2">
@@ -278,14 +320,14 @@ export default function Home() {
               <span className="text-gray-600">emails,</span>
               <input type="number" value={ntfyMb} min={0} onChange={e => setNtfyMb(+e.target.value || 0)}
                 className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-gray-100 focus:outline-none" />
-              <span className="text-gray-600">MB freed</span>
+              <span className="text-gray-600">MB</span>
             </div>
           </div>
 
-          {/* Dry run */}
+          {/* Dry run toggle */}
           <div className="flex items-center justify-between pt-1 border-t border-gray-800">
             <label className="flex items-center gap-2 cursor-pointer">
-              <button onClick={() => setDryRun(v => !v)}
+              <button onClick={() => { setDryRun(v => !v); if (dryRun) setDelSrc(false); }}
                 className={`relative w-9 h-5 rounded-full transition-colors ${dryRun ? "bg-amber-500" : "bg-gray-700"}`}>
                 <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${dryRun ? "left-0.5" : "left-4"}`} />
               </button>
@@ -293,39 +335,41 @@ export default function Home() {
               {dryRun && <span className="text-xs text-amber-400">no writes</span>}
             </label>
             <button onClick={() => setAdv(v => !v)} className="text-xs text-gray-700 hover:text-gray-400">
-              {adv ? "\u25b2 less" : "\u25bc more"}
+              {adv ? "▲ less" : "▼ more"}
             </button>
           </div>
+
+          {/* Delete from source — visible when live mode, outside advanced */}
+          {!dryRun && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-2 rounded-lg border border-red-900/40 bg-red-950/20">
+              <input type="checkbox" checked={delSrc} onChange={e => setDelSrc(e.target.checked)} className="accent-red-500" />
+              <span className="text-red-400">Delete from source after confirmed migration</span>
+            </label>
+          )}
 
           {adv && (
             <div className="pt-2 border-t border-gray-800 space-y-2">
               <div>
-                <p className="text-xs text-gray-600 mb-1">Email limit (0 = \u221e)</p>
+                <p className="text-xs text-gray-600 mb-1">Email limit (0 = ∞)</p>
                 <input type="number" value={emailLim} min={0} onChange={e => setEmailLim(+e.target.value || 0)}
                   className="w-32 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-100 focus:outline-none" />
               </div>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={skipDedup} onChange={e => setSkipDedup(e.target.checked)} className="accent-blue-500" />
-                <span className="text-gray-400">Skip dedup (faster first-run)</span>
+                <span className="text-gray-400">Skip dedup (faster first-run on empty dest)</span>
               </label>
-              {!dryRun && (
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={delSrc} onChange={e => setDelSrc(e.target.checked)} className="accent-red-500" />
-                  <span className="text-red-400">Delete from source after migration</span>
-                </label>
-              )}
             </div>
           )}
 
           {/* Buttons */}
           <div className="flex gap-2 pt-1">
-            <button onClick={() => runMigration(true)} disabled={dispatching}
+            <button onClick={() => runMigration(true)} disabled={dispatching || !srcAcc}
               className="flex-1 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-sm font-semibold disabled:opacity-50">
               Dry Run
             </button>
-            <button onClick={() => runMigration(false)} disabled={dispatching || (!destG2 && !destG3)}
+            <button onClick={() => runMigration(false)} disabled={dispatching || !srcAcc || (!d1Acc && !d2Acc)}
               className="flex-[2] py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold disabled:opacity-50">
-              {dispatching ? "Dispatching\u2026" : "\u25B6 Run Migration"}
+              {dispatching ? "Dispatching…" : "▶ Run Migration"}
             </button>
           </div>
 
@@ -334,10 +378,10 @@ export default function Home() {
               result.ok ? "bg-emerald-900/30 border border-emerald-800 text-emerald-300"
                         : "bg-red-900/30 border border-red-800 text-red-300"
             }`}>
-              {result.ok ? "\u2705 " : "\u274C "}{result.msg}
+              {result.ok ? "✅ " : "❌ "}{result.msg}
               {result.ok && ghRepo && (
                 <a href={`https://github.com/${ghRepo}/actions`} target="_blank" rel="noopener noreferrer"
-                  className="ml-1 underline">Actions \u2192</a>
+                  className="ml-1 underline">Actions →</a>
               )}
             </div>
           )}
@@ -349,20 +393,20 @@ export default function Home() {
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Run Status</h2>
             {ghRepo && (
               <a href={`https://github.com/${ghRepo}/actions`} target="_blank" rel="noopener noreferrer"
-                className="text-xs text-gray-700 hover:text-blue-400">View Actions \u2192</a>
+                className="text-xs text-gray-700 hover:text-blue-400">View Actions →</a>
             )}
           </div>
 
-          {loadingS && !status && <p className="text-sm text-gray-700">Loading\u2026</p>}
+          {loadingS && !status && <p className="text-sm text-gray-700">Loading…</p>}
 
           {(["dest1", "dest2"] as const).map((key, i) => {
             const s = status?.[key];
-            const label = i === 0 ? d1Label : d2Label;
+            const label = i === 0 ? (d1Acc || "dest1") : (d2Acc || "dest2");
             const pct = totalFolders > 0 && s ? Math.round((s.completed_folders / totalFolders) * 100) : 0;
             return (
               <div key={key} className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-300">{label} <span className="text-gray-600 text-xs">({key})</span></span>
+                  <span className="text-sm font-medium text-gray-300 truncate max-w-[60%]">{label}</span>
                   {s && <span className={`text-xs font-semibold ${statusBadge(s.status)}`}>{s.status}</span>}
                 </div>
                 {s ? (
@@ -387,7 +431,7 @@ export default function Home() {
           })}
 
           {(status?.dest1?.status === "running" || status?.dest2?.status === "running") && (
-            <p className="text-xs text-blue-400">\u25CF Live \u2014 auto-refreshing every 30s</p>
+            <p className="text-xs text-blue-400">● Live — auto-refreshing every 30s</p>
           )}
         </div>
       </div>
