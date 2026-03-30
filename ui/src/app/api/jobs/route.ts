@@ -24,7 +24,7 @@ export async function GET() {
     fetch(`${GH_API}/repos/${repo}/actions/workflows/cleanup.yml/runs?per_page=3`, { headers: ghHeaders(token), cache: "no-store" }),
   ]);
 
-  const runs: object[] = [];
+  const runs: Record<string, unknown>[] = [];
   if (mRes.ok) { const d = await mRes.json(); runs.push(...(d.workflow_runs ?? [])); }
   if (cRes.ok) { const d = await cRes.json(); runs.push(...(d.workflow_runs ?? [])); }
 
