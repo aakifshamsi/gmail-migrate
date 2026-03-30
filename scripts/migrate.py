@@ -59,7 +59,8 @@ NTFY_MB_MILESTONE    = int(os.environ.get("NTFY_MB_MILESTONE", "50")) * 1024 * 1
 _FOLDERS_RAW         = os.environ.get("MIGRATION_FOLDERS", "")
 FOLDERS_FILTER       = {f.strip() for f in _FOLDERS_RAW.split(",") if f.strip()} or None
 
-GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
+GMAIL_API        = "https://gmail.googleapis.com/gmail/v1/users/me"
+GMAIL_UPLOAD_API = "https://www.googleapis.com/upload/gmail/v1/users/me"
 
 _token_cache = {}
 
@@ -124,8 +125,8 @@ def get_dest_token():
     return get_token(DEST_USER)
 
 # ── Gmail API ──
-def gmail_api(token, path, method="GET", body=None, content_type="application/json"):
-    url = GMAIL_API + path
+def gmail_api(token, path, method="GET", body=None, content_type="application/json", full_url=None):
+    url = full_url if full_url else (GMAIL_API + path)
     headers = {"Authorization": f"Bearer {token}", "User-Agent": "gmail-migrate/1.0"}
     data = None
     if body is not None:
@@ -204,25 +205,46 @@ def list_all_messages(token, query="", max_results=0):
     return all_msgs
 
 def get_message_raw(token, msg_id):
-    data = gmail_api(token, f"/messages/{msg_id}?format=raw")
+    try:
+        data = gmail_api(token, f"/messages/{msg_id}?format=raw")
+    except RuntimeError as e:
+        if ": 404 " in str(e):
+            log(f"  Source message {msg_id} not found (404) — already deleted or moved")
+            return None
+        raise
     if isinstance(data, dict):
         raw_b64 = data.get("raw", "")
         if raw_b64:
-            return base64.urlsafe_b64decode(raw_b64)
+            # Gmail omits base64url padding — restore before decoding
+            pad = (4 - len(raw_b64) % 4) % 4
+            return base64.urlsafe_b64decode(raw_b64 + "=" * pad)
     return None
 
 def import_message(token, raw_bytes, label_ids=None):
-    """Import raw RFC 2822 message. Preserves original delivery timestamp."""
-    raw_b64 = base64.urlsafe_b64encode(raw_bytes).decode("ascii")
-    body = {"raw": raw_b64}
-    if label_ids:
-        body["labelIds"] = label_ids
-    return gmail_api(
-        token,
-        "/messages/import?neverMarkSpam=true&internalDateSource=dateHeader",
-        method="POST",
-        body=body
+    """Import raw RFC 2822 via multipart/related upload.
+
+    Avoids the simple REST endpoint's 5 MB cap and base64-in-JSON encoding,
+    which is the root cause of '400 Invalid attachment' on large/complex messages.
+    Supports messages up to 36 MB (Gmail's multipart upload limit).
+    """
+    boundary = "gmig_" + base64.urlsafe_b64encode(os.urandom(9)).decode()
+    metadata = json.dumps({"labelIds": label_ids} if label_ids else {}).encode()
+    body = (
+        b"--" + boundary.encode() + b"\r\n"
+        + b"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+        + metadata
+        + b"\r\n--" + boundary.encode() + b"\r\n"
+        + b"Content-Type: message/rfc822\r\n\r\n"
+        + raw_bytes
+        + b"\r\n--" + boundary.encode() + b"--"
     )
+    upload_url = (
+        f"{GMAIL_UPLOAD_API}/messages/import"
+        "?uploadType=multipart&neverMarkSpam=true&internalDateSource=dateHeader"
+    )
+    return gmail_api(token, "", method="POST", body=body,
+                     content_type=f"multipart/related; boundary={boundary}",
+                     full_url=upload_url)
 
 def get_message_id_from_raw(raw_bytes):
     try:
@@ -408,11 +430,19 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
                 time.sleep(0.5)
 
         except RuntimeError as e:
+            err_str = str(e)
+            err_l = err_str.lower()
+            # Non-retryable import rejections — skip without counting toward error threshold
+            if ": 400 " in err_str and ("invalid" in err_l or "attachment" in err_l):
+                log(f"  Non-retryable import rejection on {msg_id}: {err_str[:120]}")
+                skipped += 1
+                last_processed_msg_id = msg_id
+                continue
             log(f"  Error on msg {msg_id}: {e}")
             state.setdefault("errors", []).append({
                 "folder": src_folder,
                 "msg_id": msg_id,
-                "error": str(e)[:200],
+                "error": err_str[:200],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
             error_count += 1

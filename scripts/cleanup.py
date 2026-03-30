@@ -99,8 +99,28 @@ def gmail_post(token: str, path: str, body: dict) -> None:
                 time.sleep(2 ** (attempt + 1))
                 continue
             body_text = e.read().decode() if e.fp else str(e)
+            if e.code == 403:
+                raise RuntimeError(
+                    f"POST {path}: 403 Forbidden — token lacks gmail.modify scope. "
+                    f"Re-auth source account at {WORKER_URL}/auth/{SOURCE_USER}. "
+                    f"Detail: {body_text[:150]}"
+                )
             raise RuntimeError(f"POST {path}: {e.code} {body_text[:200]}")
     raise RuntimeError(f"POST {path}: failed after 3 attempts")
+
+
+def preflight_check(token: str) -> None:
+    """Verify token identity and scope before any deletes."""
+    try:
+        profile = gmail_get(token, "/profile")
+        authed_as = profile.get("emailAddress", "unknown")
+        log(f"  Authenticated as: {authed_as}")
+        if authed_as.lower() != SOURCE_USER.lower():
+            log(f"FATAL: token is for {authed_as} but GMAIL_SOURCE_USER={SOURCE_USER}")
+            sys.exit(1)
+    except RuntimeError as e:
+        log(f"FATAL: preflight failed: {e}")
+        sys.exit(1)
 
 
 def list_all_message_ids(token: str, label_id: str) -> list[str]:
@@ -137,6 +157,7 @@ def main() -> None:
 
     src_token = get_token(SOURCE_USER)
     log("✅ Source token acquired")
+    preflight_check(src_token)
 
     labels_data = gmail_get(src_token, "/labels")
     labels = labels_data.get("labels", [])
