@@ -17,13 +17,15 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timezone
 
-WORKER_URL    = os.environ["WORKER_URL"].rstrip("/")
-WORKER_TOKEN  = os.environ["WORKER_AUTH_TOKEN"]
-SOURCE_USER   = os.environ["GMAIL_SOURCE_USER"]
-ACTION        = os.environ.get("CLEANUP_ACTION", "dry-run")
-GMAIL_API     = "https://gmail.googleapis.com/gmail/v1/users/me"
-SKIP_LABELS   = {"SPAM", "TRASH", "DRAFT", "UNREAD", "CHAT"}
-BATCH_SIZE    = 1000  # Gmail batchDelete max
+WORKER_URL      = os.environ["WORKER_URL"].rstrip("/")
+WORKER_TOKEN    = os.environ["WORKER_AUTH_TOKEN"]
+CF_ACCESS_ID    = os.environ.get("CF_ACCESS_CLIENT_ID", "")
+CF_ACCESS_SECRET = os.environ.get("CF_ACCESS_CLIENT_SECRET", "")
+SOURCE_USER     = os.environ["GMAIL_SOURCE_USER"]
+ACTION          = os.environ.get("CLEANUP_ACTION", "dry-run")
+GMAIL_API       = "https://gmail.googleapis.com/gmail/v1/users/me"
+SKIP_LABELS     = {"SPAM", "TRASH", "DRAFT", "UNREAD", "CHAT"}
+BATCH_SIZE      = 1000  # Gmail batchDelete max
 
 _token_cache: dict[str, str] = {}
 
@@ -37,7 +39,11 @@ def get_token(email: str) -> str:
     if email in _token_cache:
         return _token_cache[email]
     url = f"{WORKER_URL}/api/token?email={urllib.parse.quote(email)}"
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {WORKER_TOKEN}"})
+    headers = {"Authorization": f"Bearer {WORKER_TOKEN}", "User-Agent": "gmail-cleanup/1.0"}
+    if CF_ACCESS_ID:
+        headers["CF-Access-Client-Id"] = CF_ACCESS_ID
+        headers["CF-Access-Client-Secret"] = CF_ACCESS_SECRET
+    req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
@@ -98,7 +104,6 @@ def gmail_post(token: str, path: str, body: dict) -> None:
 
 
 def list_all_message_ids(token: str, label_id: str) -> list[str]:
-    """Paginate through all messages with a given label ID."""
     ids: list[str] = []
     page_token = None
     while True:
@@ -115,7 +120,6 @@ def list_all_message_ids(token: str, label_id: str) -> list[str]:
 
 
 def batch_delete(token: str, ids: list[str]) -> int:
-    """Delete messages in chunks of BATCH_SIZE. Returns count deleted."""
     deleted = 0
     for i in range(0, len(ids), BATCH_SIZE):
         chunk = ids[i : i + BATCH_SIZE]
@@ -134,11 +138,9 @@ def main() -> None:
     src_token = get_token(SOURCE_USER)
     log("✅ Source token acquired")
 
-    # List all source labels
     labels_data = gmail_get(src_token, "/labels")
     labels = labels_data.get("labels", [])
 
-    # Filter to labels we care about
     interesting = [
         l for l in labels
         if l["name"] not in SKIP_LABELS
@@ -155,7 +157,6 @@ def main() -> None:
         label_id   = label["id"]
         label_name = label["name"]
 
-        # Get message count via label detail
         try:
             detail = gmail_get(src_token, f"/labels/{label_id}")
             count  = detail.get("messagesTotal", 0)
