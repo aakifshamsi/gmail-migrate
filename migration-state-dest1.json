@@ -3,13 +3,13 @@
   "source_account": "REDACTED",
   "destination": "dest1",
   "strategy": "size",
-  "processed_emails": 2648,
-  "processed_bytes": 538705969,
+  "processed_emails": 2655,
+  "processed_bytes": 538736967,
   "last_uid": null,
-  "last_folder": "to do",
+  "last_folder": "tut",
   "status": "completed",
   "started_at": "2026-03-29T21:12:19.789293+00:00",
-  "updated_at": "2026-03-30T10:57:15.544288+00:00",
+  "updated_at": "2026-03-30T20:18:57.074309+00:00",
   "target_emails": 0,
   "target_bytes": 0,
   "errors": [
@@ -179,11 +179,11 @@
       "completed": true
     },
     "tut": {
-      "copied": 7,
-      "bytes": 6182647,
+      "copied": 0,
+      "bytes": 0,
       "skipped": 0,
       "last_msg_id": "137a26203b6f57ce",
-      "completed": false
+      "completed": true
     },
     "Digital Hands/dH-Accounts": {
       "copied": 0,
@@ -219,6 +219,13 @@
       "skipped": 0,
       "last_msg_id": "139a0d8d7bb0ccee",
       "completed": true
+    },
+    "jokester": {
+      "copied": 7,
+      "bytes": 30998,
+      "skipped": 0,
+      "last_msg_id": "12aae2d4af4e4ed7",
+      "completed": true
     }
   },
   "completed_folders": [
@@ -229,7 +236,9 @@
     "Digital Hands/aakif",
     "Digital Hands/suhaib",
     "Done!",
-    "to do"
+    "to do",
+    "jokester",
+    "tut"
   ],
   "last_msg_id": "16e8812b162dd50b"
 }
