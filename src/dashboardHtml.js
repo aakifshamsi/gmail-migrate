@@ -198,6 +198,10 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
   }
 
   if(TK){ checkAuth(); } else { setAuthState(false); }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(function(){});
+  }
   </script>
 </body>
 </html>`;
