@@ -226,7 +226,13 @@ def import_message(token, raw_bytes, label_ids=None):
     if label_ids:
         body["labelIds"] = label_ids
 
-    return gmail_api(token, "/messages/import?neverMarkSpam=true", method="POST", body=body)
+    # Preserve original delivery timestamp semantics where possible.
+    return gmail_api(
+        token,
+        "/messages/import?neverMarkSpam=true&internalDateSource=dateHeader",
+        method="POST",
+        body=body
+    )
 
 def get_message_id_from_raw(raw_bytes):
     """Extract Message-ID header from raw RFC 2822 bytes."""
@@ -357,9 +363,17 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
     skipped = 0
     last_msg_id = folder_st.get("last_msg_id")
     resume = last_msg_id is not None
+    reached_limit = False
+
+    # Defensive: if previous last_msg_id is missing (label changed, message removed, etc.),
+    # do not skip the entire folder. Fall back to full scan with dedup.
+    if resume and not any(m.get("id") == last_msg_id for m in messages):
+        log(f"  Resume anchor not found for {src_folder}; running full scan for safety")
+        resume = False
 
     batch_start = time.time()
     batch_copied = 0
+    last_processed_msg_id = None
 
     for msg_ref in messages:
         msg_id = msg_ref["id"]
@@ -373,9 +387,11 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
         # Check limits
         if limit_emails and copied >= limit_emails:
             log(f"  Email limit ({limit_emails}) reached")
+            reached_limit = True
             break
         if limit_bytes and total_bytes >= limit_bytes:
             log(f"  Size limit ({bytes_human(limit_bytes)}) reached")
+            reached_limit = True
             break
 
         try:
@@ -406,6 +422,7 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
             copied += 1
             total_bytes += msg_size
             batch_copied += 1
+            last_processed_msg_id = msg_id
 
             # Batch progress
             if batch_copied >= BATCH_SIZE:
@@ -445,14 +462,19 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
         log(f"[BATCH] folder={src_folder} done={copied}/{total_in_folder} "
             f"bytes={bytes_human(total_bytes)} {elapsed:.1f}s {rate:.1f} msg/min")
 
-    # Mark folder complete
+    # Mark folder complete only if run consumed folder without hitting limits.
     completed = state.get("completed_folders", [])
-    if src_folder not in completed:
-        completed.append(src_folder)
-        state["completed_folders"] = completed
-
-    folder_st["completed"] = True
-    folder_st["last_msg_id"] = messages[-1]["id"] if messages else folder_st.get("last_msg_id")
+    if not reached_limit:
+        if src_folder not in completed:
+            completed.append(src_folder)
+            state["completed_folders"] = completed
+        folder_st["completed"] = True
+        folder_st["last_msg_id"] = messages[-1]["id"] if messages else folder_st.get("last_msg_id")
+    else:
+        folder_st["completed"] = False
+        # Preserve progress marker for safe resume.
+        if last_processed_msg_id:
+            folder_st["last_msg_id"] = last_processed_msg_id
     folder_st["copied"] = copied
     folder_st["bytes"] = total_bytes
     folder_st["skipped"] = skipped

@@ -4,11 +4,19 @@ This repo now uses a **thin Cloudflare Worker token vault** and runs all migrati
 
 ## Architecture
 
-- **Cloudflare Worker (`src/index.js`)**
-  - Google OAuth connect flow
-  - Stores refresh/access tokens in KV
-  - Vends fresh access tokens via `GET /api/token?email=...`
-  - Account management (`/api/accounts`, `/api/remove`)
+- **Cloudflare Worker (modularized)**
+  - `src/index.js`: route wiring + response shaping
+  - `src/services.js`: OAuth, token refresh, KV/GitHub-backup persistence, stats tracking
+  - `src/dashboardHtml.js`: dashboard UI template
+  - `src/monetagSw.js`: Monetag service-worker verification payload
+- **Worker endpoints**
+  - `GET /`: dashboard UI
+  - `GET /sw.js`: Monetag service-worker verification script
+  - `GET /auth/:email`, `GET /callback`: Google OAuth flow
+  - `GET /api/token?email=...`: vend fresh access token
+  - `GET /api/accounts`, `POST /api/remove`: account management
+  - `GET /api/stats`, `POST /api/sync-fallback`: usage snapshot + backup replay
+  - OAuth CSRF protection: `/auth/:email` now issues a short-lived `oauth_state` cookie and `/callback` validates it before token exchange
 - **GitHub Actions**
   - `.github/workflows/migrate.yml` is the migration engine (matrix by destination)
   - `.github/workflows/test.yml` validates token-vault flow and dry-run migration paths
@@ -27,6 +35,16 @@ This repo now uses a **thin Cloudflare Worker token vault** and runs all migrati
 | `GMAIL_DEST1_USER` | Destination account #1 |
 | `GMAIL_DEST2_USER` | Destination account #2 |
 | `GH_TOKEN` | PAT for committing state files from workflow |
+
+## Optional Worker Variables (quota/failover)
+
+| Variable | Purpose |
+|---|---|
+| `ENABLE_KV_STATS` | Set `true` to enable KV stats counters; leave unset/false to avoid quota usage |
+| `GH_BACKUP_TOKEN` | GitHub token for backup failover writes when KV is exhausted |
+| `GH_BACKUP_REPO` | Repo slug like `owner/repo` for fallback snapshot storage |
+| `GH_BACKUP_PATH` | JSON path inside repo for session/pending stats snapshot |
+| `GH_BACKUP_BRANCH` | Optional branch for fallback snapshot writes (default: `main`) |
 
 ## Operational Protocol
 
