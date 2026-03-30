@@ -3,13 +3,13 @@
   "source_account": "REDACTED",
   "destination": "dest1",
   "strategy": "size",
-  "processed_emails": 3854,
-  "processed_bytes": 493664190,
+  "processed_emails": 3861,
+  "processed_bytes": 493695188,
   "last_uid": null,
-  "last_folder": "to do",
+  "last_folder": "jokester",
   "status": "completed",
   "started_at": "2026-03-29T21:02:02.327144+00:00",
-  "updated_at": "2026-03-30T10:57:15.516769+00:00",
+  "updated_at": "2026-03-30T20:18:54.670423+00:00",
   "target_emails": 0,
   "target_bytes": 0,
   "errors": [
@@ -38104,11 +38104,11 @@
       "completed": false
     },
     "jokester": {
-      "copied": 0,
-      "bytes": 0,
+      "copied": 7,
+      "bytes": 30998,
       "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "last_msg_id": "12aae2d4af4e4ed7",
+      "completed": true
     },
     "mail@250free.tk": {
       "copied": 0,
@@ -38268,7 +38268,8 @@
     "INBOX",
     "SENT",
     "STARRED",
-    "to do"
+    "to do",
+    "jokester"
   ],
   "last_msg_id": "18bcfe56a6d8cd39"
 }
