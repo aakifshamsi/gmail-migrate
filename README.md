@@ -96,7 +96,7 @@ A deployment workflow now exists at `.github/workflows/deploy-worker.yml`.
 
 ## Vercel note
 
-This repository is a Cloudflare Worker + scripts project (not a Next.js app). If connected to Vercel, set framework preset to **Other** or disable auto-deploy hooks to avoid false Next.js build errors.
+This repository is a Cloudflare Worker + scripts project (not a Next.js app). If connected to Vercel, set framework preset to **Node.js** (or disable auto-deploy hooks) to avoid false Next.js build errors.
 
 ## Prompt for a fresh ChatGPT Codex environment
 
