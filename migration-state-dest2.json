@@ -2,14 +2,14 @@
   "schema_version": 2,
   "source_account": "REDACTED",
   "destination": "dest1",
-  "strategy": "size",
-  "processed_emails": 3861,
-  "processed_bytes": 493695188,
+  "strategy": "folder",
+  "processed_emails": 3876,
+  "processed_bytes": 493750413,
   "last_uid": null,
-  "last_folder": "jokester",
+  "last_folder": "eMoneySpace/b3byko",
   "status": "completed",
   "started_at": "2026-03-29T21:02:02.327144+00:00",
-  "updated_at": "2026-03-30T20:39:20.663992+00:00",
+  "updated_at": "2026-03-30T20:54:08.619535+00:00",
   "target_emails": 0,
   "target_bytes": 0,
   "errors": [
@@ -38048,11 +38048,11 @@
       "completed": false
     },
     "eMoneySpace/b3byko": {
-      "copied": 0,
-      "bytes": 0,
+      "copied": 15,
+      "bytes": 55225,
       "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "last_msg_id": "130e98b3a812c76f",
+      "completed": true
     },
     "eMoneySpace/lissaj": {
       "copied": 0,
@@ -38269,7 +38269,8 @@
     "SENT",
     "STARRED",
     "to do",
-    "jokester"
+    "jokester",
+    "eMoneySpace/b3byko"
   ],
   "last_msg_id": "18bcfe56a6d8cd39"
 }
