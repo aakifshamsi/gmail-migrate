@@ -96,7 +96,7 @@ A deployment workflow now exists at `.github/workflows/deploy-worker.yml`.
 
 ## Vercel note
 
-This repository is a Cloudflare Worker + scripts project (not a Next.js app). The checked-in `vercel.json` uses a static placeholder route (`vercel-static/index.html`) so Vercel does not try to interpret `src/index.js` as a framework build/function entry.
+This repository is a Cloudflare Worker + scripts project (not a Next.js app). The checked-in `vercel.json` uses a tiny Vercel Node proxy (`api/proxy.js`) that redirects all Vercel traffic to `WORKER_URL`, so the real dashboard remains accessible from the Worker origin.
 
 ## Prompt for a fresh ChatGPT Codex environment
 
