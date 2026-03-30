@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "node",
-  "buildCommand": "echo 'Cloudflare Worker repo: skipping Next.js build'",
-  "outputDirectory": "."
+  "buildCommand": "mkdir -p .vercel-static && printf '%s' '<!doctype html><html><body><h1>Cloudflare Worker Repo</h1><p>Deploy via Wrangler/GitHub Actions.</p></body></html>' > .vercel-static/index.html",
+  "outputDirectory": ".vercel-static"
 }
