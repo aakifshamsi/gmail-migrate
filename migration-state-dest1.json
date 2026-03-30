@@ -3,16 +3,131 @@
   "source_account": "REDACTED",
   "destination": "dest1",
   "strategy": "size",
-  "processed_emails": 1318,
-  "processed_bytes": 12480005,
+  "processed_emails": 2647,
+  "processed_bytes": 538703069,
   "last_uid": null,
-  "last_folder": "tut",
+  "last_folder": "Done!",
   "status": "completed",
   "started_at": "2026-03-29T21:12:19.789293+00:00",
-  "updated_at": "2026-03-30T00:34:29.069939+00:00",
+  "updated_at": "2026-03-30T06:12:46.898692+00:00",
   "target_emails": 0,
   "target_bytes": 0,
-  "errors": [],
+  "errors": [
+    {
+      "folder": "Digital Hands/aakif",
+      "msg_id": "14b3059daae40aac",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:38:37.535933+00:00"
+    },
+    {
+      "folder": "Digital Hands/aakif",
+      "msg_id": "1308fddb8f3930b0",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:47:44.645532+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "137333b8da169fe3",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:49:07.000298+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1327c02f200e7393",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:06.948648+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "132768c69a740786",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:20.492028+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13270e903f54cf65",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:23.513973+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13270d87b324bc1d",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:28.416519+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13270d09c38e7073",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:32.316265+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1326d7ad547261d1",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:56.401885+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13263a5506d664af",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:09.379699+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13263a3f0026de5a",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:14.516868+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1326382bfda582af",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:16.416168+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "132626ec8c1fac88",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:19.963468+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "132621242bfec953",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:25.950619+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1325f35871bb14a2",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:34.285967+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1325f0f70f07d8dc",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:44.158411+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1325ef30c813ab6f",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:46.328593+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1325eea769970475",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:49.919657+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "131fa627ad1e9c3a",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:54:53.899886+00:00"
+    }
+  ],
   "folder_state": {
     "BLUE_CIRCLE": {
       "copied": 0,
@@ -57,11 +172,11 @@
       "completed": true
     },
     "Digital Hands/aakif": {
-      "copied": 0,
-      "bytes": 0,
-      "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "copied": 640,
+      "bytes": 135448612,
+      "skipped": 21,
+      "last_msg_id": "12e9b02cf1c08bf8",
+      "completed": true
     },
     "tut": {
       "copied": 7,
@@ -69,13 +184,44 @@
       "skipped": 0,
       "last_msg_id": "137a26203b6f57ce",
       "completed": false
+    },
+    "Digital Hands/dH-Accounts": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "Digital Hands/suhaib": {
+      "copied": 250,
+      "bytes": 57880718,
+      "skipped": 18,
+      "last_msg_id": "12e9b67f99552e9d",
+      "completed": true
+    },
+    "Done!": {
+      "copied": 439,
+      "bytes": 332893734,
+      "skipped": 942,
+      "last_msg_id": "10d73e4d1731333c",
+      "completed": true
+    },
+    "GMX": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
     }
   },
   "completed_folders": [
     "CHAT",
     "Cash Cafe",
     "Digital Hands",
-    "Digital Hands/TMF Update"
+    "Digital Hands/TMF Update",
+    "Digital Hands/aakif",
+    "Digital Hands/suhaib",
+    "Done!"
   ],
-  "last_msg_id": "168c8358cad260d9"
+  "last_msg_id": "16e8812b162dd50b"
 }
