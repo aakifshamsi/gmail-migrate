@@ -364,6 +364,8 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
     last_msg_id = folder_st.get("last_msg_id")
     resume = last_msg_id is not None
     reached_limit = False
+    had_fatal_error = False
+    error_count = 0
 
     # Defensive: if previous last_msg_id is missing (label changed, message removed, etc.),
     # do not skip the entire folder. Fall back to full scan with dedup.
@@ -453,6 +455,25 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
                 "error": str(e)[:200],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
+            error_count += 1
+
+            err_l = str(e).lower()
+            if ("insufficient authentication scopes" in err_l or
+                (" 403 " in f" {err_l} " and "/messages/" in err_l)):
+                had_fatal_error = True
+                save_state(state)
+                raise RuntimeError(
+                    f"Fatal API permission error in {src_folder}. "
+                    "Re-auth source account with required Gmail scopes and retry."
+                ) from e
+
+            if error_count >= 25:
+                had_fatal_error = True
+                save_state(state)
+                raise RuntimeError(
+                    f"Aborting folder {src_folder}: too many message-level errors ({error_count})."
+                ) from e
+
             skipped += 1
 
     # Final batch flush
@@ -464,7 +485,7 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
 
     # Mark folder complete only if run consumed folder without hitting limits.
     completed = state.get("completed_folders", [])
-    if not reached_limit:
+    if not reached_limit and not had_fatal_error:
         if src_folder not in completed:
             completed.append(src_folder)
             state["completed_folders"] = completed
