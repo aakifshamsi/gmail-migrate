@@ -2,14 +2,14 @@
   "schema_version": 2,
   "source_account": "REDACTED",
   "destination": "dest1",
-  "strategy": "folder",
-  "processed_emails": 3876,
-  "processed_bytes": 493750413,
+  "strategy": "size",
+  "processed_emails": 5918,
+  "processed_bytes": 837417133,
   "last_uid": null,
-  "last_folder": "eMoneySpace/b3byko",
+  "last_folder": "admin@webhostx.tk",
   "status": "completed",
   "started_at": "2026-03-29T21:02:02.327144+00:00",
-  "updated_at": "2026-03-30T20:54:08.619535+00:00",
+  "updated_at": "2026-03-31T06:18:28.417291+00:00",
   "target_emails": 0,
   "target_bytes": 0,
   "errors": [
@@ -37845,11 +37845,11 @@
       "completed": true
     },
     "GMX": {
-      "copied": 0,
-      "bytes": 0,
-      "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "copied": 263,
+      "bytes": 17567937,
+      "skipped": 1,
+      "last_msg_id": "12e84dbbf67ede16",
+      "completed": true
     },
     "GREEN_CIRCLE": {
       "copied": 0,
@@ -37866,32 +37866,32 @@
       "completed": false
     },
     "Infodart": {
-      "copied": 0,
-      "bytes": 0,
-      "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "copied": 783,
+      "bytes": 229706226,
+      "skipped": 25,
+      "last_msg_id": "13ccdfc6d0dc24b8",
+      "completed": true
     },
     "Infodart/MFL": {
-      "copied": 0,
-      "bytes": 0,
-      "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "copied": 405,
+      "bytes": 74231727,
+      "skipped": 487,
+      "last_msg_id": "13ccdfc6d0dc24b8",
+      "completed": true
     },
     "Infodart/bugzilla": {
-      "copied": 0,
-      "bytes": 0,
+      "copied": 134,
+      "bytes": 541473,
       "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "last_msg_id": "13dfd5971a243bdf",
+      "completed": true
     },
     "LibertyReserve": {
-      "copied": 0,
-      "bytes": 0,
+      "copied": 55,
+      "bytes": 166966,
       "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "last_msg_id": "12420be4adf1df2b",
+      "completed": true
     },
     "ORANGE_CIRCLE": {
       "copied": 0,
@@ -37915,25 +37915,25 @@
       "completed": true
     },
     "PTC/PAID": {
-      "copied": 0,
-      "bytes": 0,
+      "copied": 168,
+      "bytes": 1151463,
       "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "last_msg_id": "12c09239da9424ba",
+      "completed": true
     },
     "PTC/SCAM": {
-      "copied": 0,
-      "bytes": 0,
+      "copied": 24,
+      "bytes": 74689,
       "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "last_msg_id": "12dcb751afc51eb8",
+      "completed": true
     },
     "PTC/TOO SLOW": {
-      "copied": 0,
-      "bytes": 0,
+      "copied": 2,
+      "bytes": 5730,
       "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "last_msg_id": "12faa804081a3346",
+      "completed": true
     },
     "PURPLE_CIRCLE": {
       "copied": 0,
@@ -37992,18 +37992,18 @@
       "completed": false
     },
     "aakif@digitalhands.co.in": {
-      "copied": 0,
-      "bytes": 0,
-      "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "copied": 208,
+      "bytes": 20220509,
+      "skipped": 112,
+      "last_msg_id": "13475c400b8c4273",
+      "completed": true
     },
     "admin@webhostx.tk": {
       "copied": 0,
       "bytes": 0,
-      "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "skipped": 4,
+      "last_msg_id": "12da33bb0144b080",
+      "completed": true
     },
     "blog stuff": {
       "copied": 0,
@@ -38270,7 +38270,17 @@
     "STARRED",
     "to do",
     "jokester",
-    "eMoneySpace/b3byko"
+    "eMoneySpace/b3byko",
+    "GMX",
+    "Infodart",
+    "Infodart/MFL",
+    "Infodart/bugzilla",
+    "LibertyReserve",
+    "PTC/PAID",
+    "PTC/SCAM",
+    "PTC/TOO SLOW",
+    "aakif@digitalhands.co.in",
+    "admin@webhostx.tk"
   ],
-  "last_msg_id": "18bcfe56a6d8cd39"
+  "last_msg_id": "1352364420b52943"
 }
