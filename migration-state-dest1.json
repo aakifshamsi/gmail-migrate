@@ -6,10 +6,10 @@
   "processed_emails": 4567,
   "processed_bytes": 873661497,
   "last_uid": null,
-  "last_folder": "STARRED",
+  "last_folder": "PTC/TOO SLOW",
   "status": "completed",
   "started_at": "2026-03-29T21:12:19.789293+00:00",
-  "updated_at": "2026-03-31T07:12:34.397184+00:00",
+  "updated_at": "2026-03-31T15:48:31.704564+00:00",
   "target_emails": 0,
   "target_bytes": 0,
   "errors": [
@@ -314,9 +314,9 @@
     "PTC/TOO SLOW": {
       "copied": 0,
       "bytes": 0,
-      "skipped": 0,
-      "last_msg_id": null,
-      "completed": false
+      "skipped": 2,
+      "last_msg_id": "12faa804081a3346",
+      "completed": true
     },
     "PURPLE_CIRCLE": {
       "copied": 0,
@@ -636,7 +636,8 @@
     "IMPORTANT",
     "INBOX",
     "SENT",
-    "STARRED"
+    "STARRED",
+    "PTC/TOO SLOW"
   ],
   "last_msg_id": "12c4aa4348fc68e1"
 }
