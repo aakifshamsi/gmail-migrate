@@ -54,6 +54,52 @@ This repo now uses a **thin Cloudflare Worker token vault** and runs all migrati
 4. Run **Migration** workflow with `dry_run=false`.
 5. Optionally run cleanup once both destination states are verified.
 
+## Sprint Status
+
+### Current Sprint — v0.4 Safety (COMPLETE)
+| # | Item | Status |
+|---|---|---|
+| #8 | CRITICAL: cleanup.py deleted ~4GB emails via batchDelete | ✅ Closed (PR #9) |
+| PR #9 | Full safety overhaul — trash, manifest-driven cleanup | ✅ Merged to main |
+| PR #10 | Codex: fingerprint verification, manifest scope | ✅ Merged into #9 |
+| PR #11 | Vercel: Next.js 15.3.8 CVE patch (RCE) | 🔲 Ready to merge |
+
+### Next Sprint — v0.5 Reliability (OPEN)
+| # | Item | Priority |
+|---|---|---|
+| #12 | BUG: migrate.py reports success with revoked source token | 🔴 P0 |
+| #13 | TASK: Real-time OAuth token status in dashboard | 🔴 P1 |
+| — | Unit test suite (pytest, no real credentials) | 🟡 P2 |
+| — | CI workflow running tests on every push | 🟡 P2 |
+| — | Custom domain `migrate.digitalhands.in` on Vercel | 🟢 P3 |
+
+### Known False Positive (Resolved)
+Migration previously reported "success" when the source account token was revoked — no preflight check existed. Tracked in #12, fix in next sprint.
+
+---
+
+## Roadmap
+
+### v0.5 — Reliability & Trust
+- Preflight token validation before any migration or cleanup job
+- Account status dashboard (valid / expired / revoked per account)
+- Automated unit tests with mocked Gmail API — no real credentials needed
+- Block job dispatch from UI if any required token is invalid
+
+### v0.6 — Recovery & Observability
+- Per-folder migration progress visible in UI (not just last run)
+- Email recovery playbook integration (Google Takeout cross-check)
+- ntfy milestone granularity configurable from UI
+- Retry queue for skipped/failed messages
+
+### v1.0 — Production Ready
+- Full migration of all folders from G1 → G2 + G3 verified
+- Cleanup verified safe via dry-run + manifest review
+- All accounts re-authorised with full scope
+- Zero hard-coded values anywhere in codebase
+
+---
+
 ## Notes for automation clients (e.g., Cline/Claw)
 
 - Treat Worker as **token authority only**.
