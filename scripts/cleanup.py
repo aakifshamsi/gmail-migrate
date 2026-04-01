@@ -267,8 +267,9 @@ def main() -> None:
 
     candidates = load_cleanup_candidates(required_destinations)
     if not candidates:
-        log("FATAL: no migrated-message manifest candidates found for required destinations.")
-        log("      Ensure migration state files are present with migrated_messages populated.")
+        log("FATAL: migration state files exist but contain no migrated_messages manifest.")
+        log("      Migration has not yet been run with the fingerprint-recording code.")
+        log("      Run a migration job first (even with a small limit), then retry cleanup.")
         sys.exit(1)
 
     log(f"Loaded {len(candidates)} unique migrated source-message candidates")
