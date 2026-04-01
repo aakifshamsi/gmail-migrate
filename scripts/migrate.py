@@ -126,6 +126,30 @@ def get_source_token():
 def get_dest_token():
     return get_token(DEST_USER)
 
+def preflight_check(token, expected_email, label="account"):
+    """Verify a Gmail token is valid and matches the expected account.
+    Exits with FATAL if the token is rejected or the email doesn't match.
+    """
+    url = "https://www.googleapis.com/gmail/v1/users/me/profile"
+    req = urllib.request.Request(
+        url, headers={"Authorization": f"Bearer {token}", "User-Agent": "gmail-migrate/1.0"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            profile = json.loads(resp.read())
+            actual = profile.get("emailAddress", "")
+            if actual.lower() != expected_email.lower():
+                log(f"FATAL: {label} token email mismatch: expected {expected_email}, got {actual}")
+                log("       Check GMAIL_SOURCE_USER / GMAIL_DEST_USER env vars and re-authorize.")
+                sys.exit(1)
+            log(f"Preflight OK: {label} = {actual}")
+    except urllib.error.HTTPError as e:
+        log(f"FATAL: {label} token rejected (HTTP {e.code}). Re-authorize before running migration.")
+        sys.exit(1)
+    except Exception as e:
+        log(f"FATAL: {label} preflight check failed: {e}")
+        sys.exit(1)
+
 # ── Gmail API ──
 def gmail_api(token, path, method="GET", body=None, content_type="application/json"):
     """Call Gmail API. Returns parsed JSON or raw bytes."""
@@ -574,10 +598,12 @@ def main():
     _notified_mb_milestone = 0
 
     try:
-        # Verify tokens work
+        # Verify tokens work and match expected accounts before touching any mail
         src_token = get_source_token()
         dst_token = get_dest_token()
-        log("✅ Tokens acquired from CF Worker")
+        preflight_check(src_token, SOURCE_USER, "source")
+        preflight_check(dst_token, DEST_USER, "dest")
+        log("✅ Tokens acquired and verified from CF Worker")
         notify(
             f"Migration started [{DEST_ID}]",
             f"Strategy: {STRATEGY}\n{SOURCE_USER} → {DEST_USER}\nDry run: {DRY_RUN}",
