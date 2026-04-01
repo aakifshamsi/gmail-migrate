@@ -31,10 +31,11 @@ DEST1_USER       = os.environ.get("GMAIL_DEST1_USER", "")
 DEST2_USER       = os.environ.get("GMAIL_DEST2_USER", "")
 DESTINATION      = os.environ.get("DESTINATION", "both")  # both | dest1 | dest2
 ACTION           = os.environ.get("CLEANUP_ACTION", "dry-run")
+CLEANUP_STATE_FILES = os.environ.get(
+    "CLEANUP_STATE_FILES",
+    "migration-state-dest1.json,migration-state-dest2.json",
+)
 GMAIL_API        = "https://gmail.googleapis.com/gmail/v1/users/me"
-SKIP_LABELS      = {"SPAM", "TRASH", "DRAFT", "UNREAD", "CHAT", "STARRED", "IMPORTANT",
-                    "SENT", "INBOX", "CATEGORY_PERSONAL", "CATEGORY_SOCIAL",
-                    "CATEGORY_PROMOTIONS", "CATEGORY_UPDATES", "CATEGORY_FORUMS"}
 
 _token_cache: dict[str, str] = {}
 
@@ -132,46 +133,86 @@ def preflight_check(token: str) -> None:
         sys.exit(1)
 
 
-def get_message_id_header(token: str, gmail_id: str) -> str | None:
-    """Fetch the Message-ID header of a Gmail message."""
+def get_message_fingerprint(token: str, gmail_id: str) -> dict | None:
+    """Get message fingerprint headers used for high-confidence verification."""
     try:
-        data = gmail_get(token, f"/messages/{gmail_id}?format=metadata&metadataHeaders=Message-ID")
+        data = gmail_get(
+            token,
+            f"/messages/{gmail_id}?format=metadata&metadataHeaders=Message-ID"
+            f"&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date",
+        )
         headers = data.get("payload", {}).get("headers", [])
+        out = {"message_id": "", "subject": "", "from": "", "date": "", "internal_date": ""}
         for h in headers:
-            if h.get("name", "").lower() == "message-id":
-                return h.get("value", "").strip()
+            name = h.get("name", "").lower()
+            if name == "message-id":
+                out["message_id"] = h.get("value", "").strip()
+            elif name == "subject":
+                out["subject"] = h.get("value", "").strip()
+            elif name == "from":
+                out["from"] = h.get("value", "").strip()
+            elif name == "date":
+                out["date"] = h.get("value", "").strip()
+        out["internal_date"] = str(data.get("internalDate", ""))
+        return out
     except RuntimeError:
-        pass
-    return None
+        return None
 
 
-def list_messages_with_ids(token: str, label_id: str) -> list[dict]:
-    """List all messages in a label, returning [{gmail_id, message_id_header}]."""
-    gmail_ids: list[str] = []
-    page_token = None
-    while True:
-        path = f"/messages?labelIds={urllib.parse.quote(label_id)}&maxResults=500"
-        if page_token:
-            path += f"&pageToken={urllib.parse.quote(page_token)}"
-        data = gmail_get(token, path)
-        for m in data.get("messages", []):
-            gmail_ids.append(m["id"])
-        page_token = data.get("nextPageToken")
-        if not page_token:
-            break
-    return gmail_ids
-
-
-def search_message_id_in_dest(token: str, message_id: str) -> bool:
-    """Check if a message with a given Message-ID header exists in destination."""
+def search_message_id_in_dest(token: str, message_id: str) -> list[str]:
+    """Return candidate Gmail IDs for a Message-ID lookup in destination."""
     if not message_id:
-        return False
+        return []
     query = urllib.parse.quote(f"rfc822msgid:{message_id}")
     try:
-        data = gmail_get(token, f"/messages?q={query}&maxResults=1")
-        return len(data.get("messages", [])) > 0
+        data = gmail_get(token, f"/messages?q={query}&maxResults=5")
+        return [m["id"] for m in data.get("messages", [])]
     except RuntimeError:
-        return False
+        return []
+
+
+def fingerprint_matches(source_fp: dict, dest_fp: dict) -> bool:
+    """Strict compare of key identity headers."""
+    return (
+        source_fp.get("message_id") == dest_fp.get("message_id")
+        and source_fp.get("subject", "") == dest_fp.get("subject", "")
+        and source_fp.get("from", "") == dest_fp.get("from", "")
+        and source_fp.get("date", "") == dest_fp.get("date", "")
+    )
+
+
+def load_cleanup_candidates(required_destinations: set[str]) -> dict[str, dict]:
+    """
+    Load source message candidates from migration state files and intersect by destination.
+    Returns source_id -> expected fingerprint.
+    """
+    files = [p.strip() for p in CLEANUP_STATE_FILES.split(",") if p.strip()]
+    by_dest: dict[str, dict[str, dict]] = {}
+    for path in files:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            dest = data.get("destination")
+            migrated = data.get("migrated_messages", {})
+            if dest in ("dest1", "dest2") and isinstance(migrated, dict):
+                by_dest[dest] = migrated
+        except (OSError, json.JSONDecodeError):
+            continue
+
+    if not required_destinations.issubset(set(by_dest.keys())):
+        return {}
+
+    common_ids: set[str] | None = None
+    for dest in sorted(required_destinations):
+        ids = set(by_dest[dest].keys())
+        common_ids = ids if common_ids is None else common_ids & ids
+
+    out: dict[str, dict] = {}
+    for source_id in sorted(common_ids or set()):
+        out[source_id] = by_dest[sorted(required_destinations)[0]].get(source_id, {})
+    return out
 
 
 def trash_message(token: str, gmail_id: str) -> bool:
@@ -218,18 +259,19 @@ def main() -> None:
     for email, _ in dest_tokens:
         log(f"✅ Destination token acquired: {email}")
 
-    labels_data = gmail_get(src_token, "/labels")
-    labels = labels_data.get("labels", [])
+    required_destinations = set()
+    if DESTINATION in ("both", "dest1"):
+        required_destinations.add("dest1")
+    if DESTINATION in ("both", "dest2"):
+        required_destinations.add("dest2")
 
-    # Only process user-created labels (not system labels)
-    interesting = [
-        l for l in labels
-        if l["name"] not in SKIP_LABELS
-        and not l["name"].startswith("CATEGORY_")
-        and l.get("type") == "user"
-    ]
+    candidates = load_cleanup_candidates(required_destinations)
+    if not candidates:
+        log("FATAL: no migrated-message manifest candidates found for required destinations.")
+        log("      Ensure migration state files are present with migrated_messages populated.")
+        sys.exit(1)
 
-    log(f"Found {len(interesting)} user labels to check")
+    log(f"Loaded {len(candidates)} unique migrated source-message candidates")
     log("")
 
     total_verified = 0
@@ -237,66 +279,45 @@ def main() -> None:
     total_not_in_dest = 0
     total_no_msgid = 0
 
-    for label in sorted(interesting, key=lambda l: l["name"]):
-        label_id = label["id"]
-        label_name = label["name"]
-
-        try:
-            detail = gmail_get(src_token, f"/labels/{label_id}")
-            count = detail.get("messagesTotal", 0)
-        except Exception as e:
-            log(f"  Skipping {label_name}: {e}")
+    candidate_ids = sorted(candidates.keys())
+    for i, gmail_id in enumerate(candidate_ids):
+        source_fp = get_message_fingerprint(src_token, gmail_id)
+        if not source_fp or not source_fp.get("message_id"):
+            total_no_msgid += 1
             continue
 
-        if count == 0:
-            continue
-
-        log(f"📁 {label_name}: {count} messages")
-        gmail_ids = list_messages_with_ids(src_token, label_id)
-        log(f"  Fetched {len(gmail_ids)} message IDs")
-
-        label_verified = 0
-        label_trashed = 0
-        label_missing = 0
-        label_no_msgid = 0
-
-        for i, gmail_id in enumerate(gmail_ids):
-            # Get the RFC Message-ID header from source
-            msg_id_header = get_message_id_header(src_token, gmail_id)
-
-            if not msg_id_header:
-                label_no_msgid += 1
+        # Expected values from migrated manifest tighten false-positive risk.
+        expected = candidates.get(gmail_id, {})
+        if expected:
+            if expected.get("message_id") and source_fp.get("message_id") != expected.get("message_id"):
+                total_not_in_dest += 1
                 continue
 
-            # Verify this exact message exists in ALL required destinations
-            in_all_dests = True
-            for dest_email, dest_token in dest_tokens:
-                if not search_message_id_in_dest(dest_token, msg_id_header):
-                    in_all_dests = False
+        in_all_dests = True
+        for dest_email, dest_token in dest_tokens:
+            matched = False
+            candidate_dest_ids = search_message_id_in_dest(dest_token, source_fp["message_id"])
+            for dest_gmail_id in candidate_dest_ids:
+                dest_fp = get_message_fingerprint(dest_token, dest_gmail_id)
+                if dest_fp and fingerprint_matches(source_fp, dest_fp):
+                    matched = True
                     break
+            if not matched:
+                log(f"  Not verified in {dest_email} for source {gmail_id}")
+                in_all_dests = False
+                break
 
-            if not in_all_dests:
-                label_missing += 1
-                continue
+        if not in_all_dests:
+            total_not_in_dest += 1
+            continue
 
-            label_verified += 1
+        total_verified += 1
+        if ACTION == "trash" and trash_message(src_token, gmail_id):
+            total_trashed += 1
 
-            if ACTION == "trash":
-                if trash_message(src_token, gmail_id):
-                    label_trashed += 1
-
-            if (i + 1) % 50 == 0:
-                log(f"  Progress: {i+1}/{len(gmail_ids)} checked, "
-                    f"{label_verified} verified, {label_trashed} trashed")
-
-        log(f"  ✅ {label_name}: {label_verified} verified in dest, "
-            f"{label_missing} NOT in dest (kept), {label_no_msgid} no Message-ID (kept), "
-            f"{label_trashed} trashed")
-
-        total_verified += label_verified
-        total_trashed += label_trashed
-        total_not_in_dest += label_missing
-        total_no_msgid += label_no_msgid
+        if (i + 1) % 50 == 0:
+            log(f"  Progress: {i+1}/{len(candidate_ids)} checked, "
+                f"{total_verified} verified, {total_trashed} trashed")
 
     log("")
     log("=" * 60)

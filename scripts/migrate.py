@@ -256,6 +256,19 @@ def get_message_id_from_raw(raw_bytes):
     except Exception:
         return ""
 
+def extract_fingerprint_from_raw(raw_bytes):
+    """Extract a lightweight identity fingerprint from raw RFC 2822 bytes."""
+    try:
+        msg = email.message_from_bytes(raw_bytes)
+        return {
+            "message_id": (msg.get("Message-ID", "") or "").strip(),
+            "subject": (msg.get("Subject", "") or "").strip(),
+            "from": (msg.get("From", "") or "").strip(),
+            "date": (msg.get("Date", "") or "").strip(),
+        }
+    except Exception:
+        return {"message_id": "", "subject": "", "from": "", "date": ""}
+
 def search_by_message_id(token, message_id):
     """Search for a message by Message-ID header. Returns message ID or None."""
     if not message_id:
@@ -309,6 +322,7 @@ def load_state():
             "started_at": None,
             "updated_at": None,
             "errors": [],
+            "migrated_messages": {},
         }
 
 def save_state(state):
@@ -319,6 +333,20 @@ def save_state(state):
 def get_folder_state(state, folder):
     fs = state.setdefault("folder_state", {})
     return fs.setdefault(folder, {"copied": 0, "bytes": 0, "skipped": 0, "last_msg_id": None, "completed": False})
+
+def record_migrated_message(state, source_msg_id, raw_bytes):
+    """Record source message copied by this run for safe cleanup scoping."""
+    fp = extract_fingerprint_from_raw(raw_bytes)
+    if not fp.get("message_id"):
+        return
+    mm = state.setdefault("migrated_messages", {})
+    mm[source_msg_id] = {
+        "message_id": fp["message_id"],
+        "subject": fp["subject"],
+        "from": fp["from"],
+        "date": fp["date"],
+        "migrated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 # ── Folder Mapping ──
 # Gmail API uses label names. Source labels map to destination labels with G- prefix.
@@ -422,6 +450,7 @@ def copy_messages(src_token, dst_token, src_folder, state, limit_bytes=0, limit_
             if not DRY_RUN:
                 dest_label_ids = [dst_labels.get(dest_label)] if dest_label in dst_labels else []
                 import_message(dst_token, raw, label_ids=[lid for lid in dest_label_ids if lid])
+                record_migrated_message(state, msg_id, raw)
 
             copied += 1
             total_bytes += msg_size

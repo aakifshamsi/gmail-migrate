@@ -294,6 +294,7 @@ jobs:
       CF_ACCESS_CLIENT_ID:     ${{ secrets.CF_ACCESS_CLIENT_ID }}
       CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
       DESTINATION:             ${{ inputs.destination || 'both' }}
+      CLEANUP_STATE_FILES:     migration-state-dest1.json,migration-state-dest2.json
 
     steps:
       - name: Mask secrets
