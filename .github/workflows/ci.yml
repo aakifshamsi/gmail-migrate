@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "ui/src/**"
+      - "tests/**"
+      - ".github/workflows/ci.yml"
+
+jobs:
+  pytest:
+    name: Python unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run tests
+        run: pytest tests/ -v
+        env:
+          # Required env vars — no real credentials needed (all HTTP is mocked)
+          WORKER_URL: "https://worker.example.com"
+          WORKER_AUTH_TOKEN: "test-token"
+          GMAIL_SOURCE_USER: "source@gmail.com"
+          GMAIL_DEST_USER: "dest@gmail.com"
+          GMAIL_DEST_ID: "dest1"
+          MIGRATION_STATE_FILE: "/tmp/test-state.json"
+          GMAIL_DEST1_USER: "dest1@gmail.com"
+          GMAIL_DEST2_USER: "dest2@gmail.com"
+          DESTINATION: "both"
+          CLEANUP_STATE_FILES: "migration-state-dest1.json,migration-state-dest2.json"
+
+  vitest:
+    name: TypeScript unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: cd ui && npm ci --ignore-scripts
+
+      - name: Run Vitest
+        run: cd ui && npm test -- --run
