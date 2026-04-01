@@ -1,9 +1,9 @@
 name: Gmail API Migration
 
 on:
-  schedule:
-    # Daily at 03:00 UTC — low-traffic window
-    - cron: '0 3 * * *'
+  # schedule:
+  #   # Daily at 03:00 UTC — low-traffic window
+  #   - cron: '0 3 * * *'
 
   workflow_dispatch:
     inputs:
@@ -76,9 +76,9 @@ on:
           - dest1
           - dest2
       delete_from_source:
-        description: '[WARN] DELETE migrated mail from source after both destinations succeed'
+        description: '[DANGER] DELETE migrated mail from source after both destinations succeed'
         required: false
-        default: true
+        default: false
         type: boolean
 
 permissions:
@@ -274,8 +274,10 @@ jobs:
           exit 1
 
   # ─────────────────────────────────────────────
-  # Cleanup: delete migrated mail from source
-  # Only runs after BOTH destinations succeed
+  # Cleanup: trash verified-migrated mail from source
+  # Uses messages.trash (recoverable 30 days) — NOT batchDelete
+  # Verifies each message by Message-ID header in destination(s) before trashing
+  # Only runs after ALL destinations succeed
   # ─────────────────────────────────────────────
   cleanup:
     needs: migrate
@@ -286,14 +288,15 @@ jobs:
       inputs.dry_run != true
     runs-on: ubuntu-latest
     env:
-      GMAIL_SOURCE_USER:    ${{ secrets.GMAIL_SOURCE_USER }}
-      GMAIL_DEST1_USER:     ${{ secrets.GMAIL_DEST1_USER }}
-      GMAIL_DEST2_USER:     ${{ secrets.GMAIL_DEST2_USER }}
-      WORKER_URL:           ${{ secrets.WORKER_URL }}
-      WORKER_AUTH_TOKEN:    ${{ secrets.WORKER_AUTH_TOKEN }}
+      GMAIL_SOURCE_USER:       ${{ secrets.GMAIL_SOURCE_USER }}
+      GMAIL_DEST1_USER:        ${{ secrets.GMAIL_DEST1_USER }}
+      GMAIL_DEST2_USER:        ${{ secrets.GMAIL_DEST2_USER }}
+      WORKER_URL:              ${{ secrets.WORKER_URL }}
+      WORKER_AUTH_TOKEN:       ${{ secrets.WORKER_AUTH_TOKEN }}
       CF_ACCESS_CLIENT_ID:     ${{ secrets.CF_ACCESS_CLIENT_ID }}
       CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-      MIGRATION_FOLDER:     ${{ inputs.folder || 'INBOX' }}
+      DESTINATION:             ${{ inputs.destination || 'both' }}
+      CLEANUP_STATE_FILES:     migration-state-dest1.json,migration-state-dest2.json
 
     steps:
       - name: Mask secrets
@@ -307,87 +310,12 @@ jobs:
       - name: Prepare scripts
         run: chmod +x scripts/*.sh scripts/*.py 2>/dev/null; true
 
-      # ── Verify both destinations have the mail ──
-      - name: Verify destinations before deletion
-        id: verify
+      # ── Trash only verified-migrated messages ──
+      - name: Trash verified-migrated messages
+        id: cleanup
         run: |
-          echo "## Pre-deletion verification" | tee cleanup-report.txt
-          echo "" | tee -a cleanup-report.txt
-
-          python3 - << 'PYEOF' | tee -a cleanup-report.txt
-          import json, os, sys, urllib.request, urllib.parse, base64
-
-          WORKER_URL = os.environ["WORKER_URL"].rstrip("/")
-          WORKER_TOKEN = os.environ["WORKER_AUTH_TOKEN"]
-          SRC = os.environ["GMAIL_SOURCE_USER"]
-          D1  = os.environ["GMAIL_DEST1_USER"]
-          D2  = os.environ["GMAIL_DEST2_USER"]
-          GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
-
-          def get_token(email):
-              url = f"{WORKER_URL}/api/token?email={urllib.parse.quote(email)}"
-              req = urllib.request.Request(url, headers={"Authorization": f"Bearer {WORKER_TOKEN}"})
-              with urllib.request.urlopen(req, timeout=15) as resp:
-                  return json.loads(resp.read())["access_token"]
-
-          def api(token, path):
-              req = urllib.request.Request(GMAIL_API + path, headers={"Authorization": f"Bearer {token}"})
-              with urllib.request.urlopen(req, timeout=30) as resp:
-                  return json.loads(resp.read())
-
-          def count_messages(token, label_name):
-              try:
-                  data = api(token, f"/messages?q=label:{urllib.parse.quote(label_name)}&maxResults=1")
-                  return data.get("resultSizeEstimate", 0)
-              except:
-                  return 0
-
-          # Get tokens
-          src_t = get_token(SRC)
-          d1_t  = get_token(D1)
-          d2_t  = get_token(D2)
-
-          # Get source labels
-          src_labels = api(src_t, "/labels")["labels"]
-          prefix = f"G-{SRC}/"
-
-          SKIP = {"SPAM", "TRASH", "DRAFT"}
-          safe = True
-
-          print(f"{'Label':<40} {'Src':>6} {'D1':>6} {'D2':>6} {'Safe?'}")
-          print(f"{'-'*40} {'---':>6} {'---':>6} {'---':>6} {'-----'}")
-
-          for label in sorted(src_labels, key=lambda l: l["name"]):
-              name = label["name"]
-              if name in SKIP or name.startswith("CATEGORY_"):
-                  continue
-
-              src_count = count_messages(src_t, name)
-              d1_count = count_messages(d1_t, f"{prefix}{name}")
-              d2_count = count_messages(d2_t, f"{prefix}{name}")
-
-              if d1_count >= src_count and d2_count >= src_count:
-                  status = "✅"
-              else:
-                  status = "⚠️ NO"
-                  safe = False
-              print(f"{name:<40} {src_count:>6} {d1_count:>6} {d2_count:>6} {status}")
-
-          print()
-          if safe:
-              print("✅ Both destinations have all mail. Safe to delete from source.")
-          else:
-              print("⚠️ NOT safe to delete — deltas exist. Run more migrations first.")
-              sys.exit(1)
-          PYEOF
-
-      # ── Execute deletion from source ──
-      - name: Delete migrated mail from source
-        id: delete
-        if: steps.verify.outcome == 'success'
-        run: |
-          echo "=== Deleting migrated mail from source ==="
-          CLEANUP_ACTION=delete python3 scripts/cleanup.py 2>&1 | tee cleanup-output.txt || true
+          echo "=== Cleanup: trash verified-migrated messages ==="
+          CLEANUP_ACTION=trash python3 scripts/cleanup.py 2>&1 | tee cleanup-output.txt
 
       # ── Upload cleanup artifacts ──
       - name: Upload cleanup artifacts
@@ -396,7 +324,6 @@ jobs:
         with:
           name: cleanup-run-${{ github.run_number }}
           path: |
-            cleanup-report.txt
             cleanup-output.txt
           retention-days: 30
           if-no-files-found: ignore

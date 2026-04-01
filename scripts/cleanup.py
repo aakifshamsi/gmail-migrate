@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-Cleanup script — delete migrated mail from source via Gmail API.
+Cleanup script — trash migrated mail from source via Gmail API.
 Uses Cloudflare Worker as token authority (same as migrate.py).
-No IMAP app passwords needed.
+
+SAFETY:
+  - Only trashes messages that are VERIFIED to exist in destination(s)
+  - Uses messages.trash (recoverable from Trash for 30 days) — NOT batchDelete
+  - Matches by Message-ID header, not Gmail internal ID
+  - Requires explicit CLEANUP_ACTION=trash to do anything
 
 CLEANUP_ACTION env var:
-  delete   — permanently delete all source messages
-  dry-run  — report what would be deleted, no writes (default)
+  trash    — move verified-migrated messages to Trash (recoverable 30 days)
+  dry-run  — report what would be trashed, no writes (default)
 """
 import json
 import os
@@ -17,15 +22,20 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timezone
 
-WORKER_URL      = os.environ["WORKER_URL"].rstrip("/")
-WORKER_TOKEN    = os.environ["WORKER_AUTH_TOKEN"]
-CF_ACCESS_ID    = os.environ.get("CF_ACCESS_CLIENT_ID", "")
+WORKER_URL       = os.environ["WORKER_URL"].rstrip("/")
+WORKER_TOKEN     = os.environ["WORKER_AUTH_TOKEN"]
+CF_ACCESS_ID     = os.environ.get("CF_ACCESS_CLIENT_ID", "")
 CF_ACCESS_SECRET = os.environ.get("CF_ACCESS_CLIENT_SECRET", "")
-SOURCE_USER     = os.environ["GMAIL_SOURCE_USER"]
-ACTION          = os.environ.get("CLEANUP_ACTION", "dry-run")
-GMAIL_API       = "https://gmail.googleapis.com/gmail/v1/users/me"
-SKIP_LABELS     = {"SPAM", "TRASH", "DRAFT", "UNREAD", "CHAT"}
-BATCH_SIZE      = 1000  # Gmail batchDelete max
+SOURCE_USER      = os.environ["GMAIL_SOURCE_USER"]
+DEST1_USER       = os.environ.get("GMAIL_DEST1_USER", "")
+DEST2_USER       = os.environ.get("GMAIL_DEST2_USER", "")
+DESTINATION      = os.environ.get("DESTINATION", "both")  # both | dest1 | dest2
+ACTION           = os.environ.get("CLEANUP_ACTION", "dry-run")
+CLEANUP_STATE_FILES = os.environ.get(
+    "CLEANUP_STATE_FILES",
+    "migration-state-dest1.json,migration-state-dest2.json",
+)
+GMAIL_API        = "https://gmail.googleapis.com/gmail/v1/users/me"
 
 _token_cache: dict[str, str] = {}
 
@@ -77,8 +87,8 @@ def gmail_get(token: str, path: str) -> dict:
     raise RuntimeError(f"GET {path}: failed after 3 attempts")
 
 
-def gmail_post(token: str, path: str, body: dict) -> None:
-    data = json.dumps(body).encode()
+def gmail_post(token: str, path: str, body: dict | None = None) -> dict | None:
+    data = json.dumps(body).encode() if body else b""
     req = urllib.request.Request(
         GMAIL_API + path,
         data=data,
@@ -92,8 +102,8 @@ def gmail_post(token: str, path: str, body: dict) -> None:
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
-                resp.read()
-            return
+                raw = resp.read()
+                return json.loads(raw) if raw else None
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 503):
                 time.sleep(2 ** (attempt + 1))
@@ -101,8 +111,8 @@ def gmail_post(token: str, path: str, body: dict) -> None:
             body_text = e.read().decode() if e.fp else str(e)
             if e.code == 403:
                 raise RuntimeError(
-                    f"POST {path}: 403 Forbidden — token lacks gmail.modify scope. "
-                    f"Re-auth source account at {WORKER_URL}/auth/{SOURCE_USER}. "
+                    f"POST {path}: 403 Forbidden — token may lack required scope. "
+                    f"Re-auth at {WORKER_URL}/auth/{SOURCE_USER}. "
                     f"Detail: {body_text[:150]}"
                 )
             raise RuntimeError(f"POST {path}: {e.code} {body_text[:200]}")
@@ -110,7 +120,7 @@ def gmail_post(token: str, path: str, body: dict) -> None:
 
 
 def preflight_check(token: str) -> None:
-    """Verify token identity and scope before any deletes."""
+    """Verify token identity before any operations."""
     try:
         profile = gmail_get(token, "/profile")
         authed_as = profile.get("emailAddress", "unknown")
@@ -123,90 +133,204 @@ def preflight_check(token: str) -> None:
         sys.exit(1)
 
 
-def list_all_message_ids(token: str, label_id: str) -> list[str]:
-    ids: list[str] = []
-    page_token = None
-    while True:
-        path = f"/messages?labelIds={urllib.parse.quote(label_id)}&maxResults=500"
-        if page_token:
-            path += f"&pageToken={urllib.parse.quote(page_token)}"
-        data = gmail_get(token, path)
-        for m in data.get("messages", []):
-            ids.append(m["id"])
-        page_token = data.get("nextPageToken")
-        if not page_token:
-            break
-    return ids
+def get_message_fingerprint(token: str, gmail_id: str) -> dict | None:
+    """Get message fingerprint headers used for high-confidence verification."""
+    try:
+        data = gmail_get(
+            token,
+            f"/messages/{gmail_id}?format=metadata&metadataHeaders=Message-ID"
+            f"&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date",
+        )
+        headers = data.get("payload", {}).get("headers", [])
+        out = {"message_id": "", "subject": "", "from": "", "date": "", "internal_date": ""}
+        for h in headers:
+            name = h.get("name", "").lower()
+            if name == "message-id":
+                out["message_id"] = h.get("value", "").strip()
+            elif name == "subject":
+                out["subject"] = h.get("value", "").strip()
+            elif name == "from":
+                out["from"] = h.get("value", "").strip()
+            elif name == "date":
+                out["date"] = h.get("value", "").strip()
+        out["internal_date"] = str(data.get("internalDate", ""))
+        return out
+    except RuntimeError:
+        return None
 
 
-def batch_delete(token: str, ids: list[str]) -> int:
-    deleted = 0
-    for i in range(0, len(ids), BATCH_SIZE):
-        chunk = ids[i : i + BATCH_SIZE]
-        gmail_post(token, "/messages/batchDelete", {"ids": chunk})
-        deleted += len(chunk)
-        log(f"  Deleted {deleted}/{len(ids)} messages...")
-    return deleted
+def search_message_id_in_dest(token: str, message_id: str) -> list[str]:
+    """Return candidate Gmail IDs for a Message-ID lookup in destination."""
+    if not message_id:
+        return []
+    query = urllib.parse.quote(f"rfc822msgid:{message_id}")
+    try:
+        data = gmail_get(token, f"/messages?q={query}&maxResults=5")
+        return [m["id"] for m in data.get("messages", [])]
+    except RuntimeError:
+        return []
+
+
+def fingerprint_matches(source_fp: dict, dest_fp: dict) -> bool:
+    """Strict compare of key identity headers."""
+    return (
+        source_fp.get("message_id") == dest_fp.get("message_id")
+        and source_fp.get("subject", "") == dest_fp.get("subject", "")
+        and source_fp.get("from", "") == dest_fp.get("from", "")
+        and source_fp.get("date", "") == dest_fp.get("date", "")
+    )
+
+
+def load_cleanup_candidates(required_destinations: set[str]) -> dict[str, dict]:
+    """
+    Load source message candidates from migration state files and intersect by destination.
+    Returns source_id -> expected fingerprint.
+    """
+    files = [p.strip() for p in CLEANUP_STATE_FILES.split(",") if p.strip()]
+    by_dest: dict[str, dict[str, dict]] = {}
+    for path in files:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            dest = data.get("destination")
+            migrated = data.get("migrated_messages", {})
+            if dest in ("dest1", "dest2") and isinstance(migrated, dict):
+                by_dest[dest] = migrated
+        except (OSError, json.JSONDecodeError):
+            continue
+
+    if not required_destinations.issubset(set(by_dest.keys())):
+        return {}
+
+    common_ids: set[str] | None = None
+    for dest in sorted(required_destinations):
+        ids = set(by_dest[dest].keys())
+        common_ids = ids if common_ids is None else common_ids & ids
+
+    out: dict[str, dict] = {}
+    for source_id in sorted(common_ids or set()):
+        out[source_id] = by_dest[sorted(required_destinations)[0]].get(source_id, {})
+    return out
+
+
+def trash_message(token: str, gmail_id: str) -> bool:
+    """Move a single message to Trash (recoverable for 30 days)."""
+    try:
+        gmail_post(token, f"/messages/{gmail_id}/trash")
+        return True
+    except RuntimeError as e:
+        log(f"  Failed to trash {gmail_id}: {e}")
+        return False
+
+
+def get_dest_tokens() -> list[tuple[str, str]]:
+    """Return list of (email, token) for destinations that need verification."""
+    dests = []
+    if DESTINATION in ("both", "dest1") and DEST1_USER:
+        dests.append((DEST1_USER, get_token(DEST1_USER)))
+    if DESTINATION in ("both", "dest2") and DEST2_USER:
+        dests.append((DEST2_USER, get_token(DEST2_USER)))
+    return dests
 
 
 def main() -> None:
     log("=" * 60)
     log(f"Gmail Cleanup — action={ACTION}")
     log(f"Source: {SOURCE_USER}")
+    if ACTION not in ("trash", "dry-run"):
+        log(f"FATAL: unknown CLEANUP_ACTION={ACTION}. Use 'trash' or 'dry-run'.")
+        sys.exit(1)
+    if ACTION == "trash":
+        log("⚠️  TRASH MODE — messages will be moved to Trash (recoverable 30 days)")
+    else:
+        log("ℹ️  DRY RUN — no changes will be made")
     log("=" * 60)
 
     src_token = get_token(SOURCE_USER)
     log("✅ Source token acquired")
     preflight_check(src_token)
 
-    labels_data = gmail_get(src_token, "/labels")
-    labels = labels_data.get("labels", [])
+    dest_tokens = get_dest_tokens()
+    if not dest_tokens:
+        log("FATAL: no destination accounts configured. Set GMAIL_DEST1_USER / GMAIL_DEST2_USER.")
+        sys.exit(1)
+    for email, _ in dest_tokens:
+        log(f"✅ Destination token acquired: {email}")
 
-    interesting = [
-        l for l in labels
-        if l["name"] not in SKIP_LABELS
-        and not l["name"].startswith("CATEGORY_")
-    ]
+    required_destinations = set()
+    if DESTINATION in ("both", "dest1"):
+        required_destinations.add("dest1")
+    if DESTINATION in ("both", "dest2"):
+        required_destinations.add("dest2")
 
-    log(f"Found {len(interesting)} labels to process")
+    candidates = load_cleanup_candidates(required_destinations)
+    if not candidates:
+        log("FATAL: migration state files exist but contain no migrated_messages manifest.")
+        log("      Migration has not yet been run with the fingerprint-recording code.")
+        log("      Run a migration job first (even with a small limit), then retry cleanup.")
+        sys.exit(1)
+
+    log(f"Loaded {len(candidates)} unique migrated source-message candidates")
     log("")
 
-    total_messages = 0
-    total_deleted = 0
+    total_verified = 0
+    total_trashed = 0
+    total_not_in_dest = 0
+    total_no_msgid = 0
 
-    for label in sorted(interesting, key=lambda l: l["name"]):
-        label_id   = label["id"]
-        label_name = label["name"]
-
-        try:
-            detail = gmail_get(src_token, f"/labels/{label_id}")
-            count  = detail.get("messagesTotal", 0)
-        except Exception as e:
-            log(f"  Skipping {label_name}: {e}")
+    candidate_ids = sorted(candidates.keys())
+    for i, gmail_id in enumerate(candidate_ids):
+        source_fp = get_message_fingerprint(src_token, gmail_id)
+        if not source_fp or not source_fp.get("message_id"):
+            total_no_msgid += 1
             continue
 
-        if count == 0:
+        # Expected values from migrated manifest tighten false-positive risk.
+        expected = candidates.get(gmail_id, {})
+        if expected:
+            if expected.get("message_id") and source_fp.get("message_id") != expected.get("message_id"):
+                total_not_in_dest += 1
+                continue
+
+        in_all_dests = True
+        for dest_email, dest_token in dest_tokens:
+            matched = False
+            candidate_dest_ids = search_message_id_in_dest(dest_token, source_fp["message_id"])
+            for dest_gmail_id in candidate_dest_ids:
+                dest_fp = get_message_fingerprint(dest_token, dest_gmail_id)
+                if dest_fp and fingerprint_matches(source_fp, dest_fp):
+                    matched = True
+                    break
+            if not matched:
+                log(f"  Not verified in {dest_email} for source {gmail_id}")
+                in_all_dests = False
+                break
+
+        if not in_all_dests:
+            total_not_in_dest += 1
             continue
 
-        log(f"  {label_name}: {count} messages")
-        total_messages += count
+        total_verified += 1
+        if ACTION == "trash" and trash_message(src_token, gmail_id):
+            total_trashed += 1
 
-        if ACTION == "delete":
-            ids = list_all_message_ids(src_token, label_id)
-            if ids:
-                deleted = batch_delete(src_token, ids)
-                total_deleted += deleted
-                log(f"  ✅ Deleted {deleted} from {label_name}")
-        elif ACTION == "dry-run":
-            log(f"  [dry-run] Would delete {count} messages from {label_name}")
+        if (i + 1) % 50 == 0:
+            log(f"  Progress: {i+1}/{len(candidate_ids)} checked, "
+                f"{total_verified} verified, {total_trashed} trashed")
 
     log("")
     log("=" * 60)
-    if ACTION == "delete":
-        log(f"Total deleted: {total_deleted} messages")
+    log(f"Total messages verified in destination(s): {total_verified}")
+    log(f"Total messages NOT in destination (kept):  {total_not_in_dest}")
+    log(f"Total messages without Message-ID (kept):  {total_no_msgid}")
+    if ACTION == "trash":
+        log(f"Total messages trashed:                    {total_trashed}")
+        log("Messages are in Trash — recoverable for 30 days.")
     else:
-        log(f"[dry-run] Would delete: {total_messages} messages total")
-        log("Set CLEANUP_ACTION=delete to perform deletion.")
+        log(f"[dry-run] Would trash: {total_verified} messages")
+        log("Set CLEANUP_ACTION=trash to move verified messages to Trash.")
     log("=" * 60)
 
 
