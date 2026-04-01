@@ -1,7 +1,7 @@
 const AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_EP = "https://oauth2.googleapis.com/token";
 const GMAIL_PROFILE = "https://gmail.googleapis.com/gmail/v1/users/me/profile";
-const SCOPE = "https://www.googleapis.com/auth/gmail.modify";
+const SCOPE = "https://mail.google.com/";
 const GH_API = "https://api.github.com";
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 

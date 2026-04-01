@@ -251,7 +251,9 @@ jobs:
           TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git commit -m "chore: update migration state [$DEST_ID] $TIMESTAMP [skip ci]"
 
-          # Retry push with rebase to handle parallel matrix jobs
+          # Retry push with rebase to handle parallel matrix jobs.
+          # --autostash handles migration.log and other unstaged files
+          # that would otherwise block 'git pull --rebase'.
           for attempt in 1 2 3 4 5; do
             if git push; then
               echo "State file committed on attempt $attempt."

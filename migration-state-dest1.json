@@ -1,1 +1,643 @@
-{"schema_version":2,"source_account":"REDACTED","destination":"dest1","strategy":"size","processed_emails":0,"processed_bytes":0,"last_uid":null,"last_folder":null,"status":"in_progress","started_at":null,"updated_at":"2026-03-27T18:55:00Z","target_emails":0,"target_bytes":0,"errors":[],"folder_state":{},"completed_folders":[]}
+{
+  "schema_version": 2,
+  "source_account": "REDACTED",
+  "destination": "dest1",
+  "strategy": "size",
+  "processed_emails": 4567,
+  "processed_bytes": 873661497,
+  "last_uid": null,
+  "last_folder": "PTC/TOO SLOW",
+  "status": "completed",
+  "started_at": "2026-03-29T21:12:19.789293+00:00",
+  "updated_at": "2026-03-31T15:48:31.704564+00:00",
+  "target_emails": 0,
+  "target_bytes": 0,
+  "errors": [
+    {
+      "folder": "Digital Hands/aakif",
+      "msg_id": "14b3059daae40aac",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:38:37.535933+00:00"
+    },
+    {
+      "folder": "Digital Hands/aakif",
+      "msg_id": "1308fddb8f3930b0",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:47:44.645532+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "137333b8da169fe3",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:49:07.000298+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1327c02f200e7393",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:06.948648+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "132768c69a740786",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:20.492028+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13270e903f54cf65",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:23.513973+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13270d87b324bc1d",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:28.416519+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13270d09c38e7073",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:32.316265+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1326d7ad547261d1",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:52:56.401885+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13263a5506d664af",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:09.379699+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "13263a3f0026de5a",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:14.516868+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1326382bfda582af",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:16.416168+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "132626ec8c1fac88",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:19.963468+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "132621242bfec953",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:25.950619+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1325f35871bb14a2",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:34.285967+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1325f0f70f07d8dc",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:44.158411+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1325ef30c813ab6f",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:46.328593+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "1325eea769970475",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:53:49.919657+00:00"
+    },
+    {
+      "folder": "Digital Hands/suhaib",
+      "msg_id": "131fa627ad1e9c3a",
+      "error": "Gmail API POST /messages/import?neverMarkSpam=true: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid attachment. Please check https://support.google.com/mail/answer/6590.\",\n    \"errors\": [\n",
+      "timestamp": "2026-03-30T05:54:53.899886+00:00"
+    }
+  ],
+  "folder_state": {
+    "BLUE_CIRCLE": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "BLUE_STAR": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "CHAT": {
+      "copied": 158,
+      "bytes": 1049845,
+      "skipped": 302,
+      "last_msg_id": "111789166183fc72",
+      "completed": true
+    },
+    "Cash Cafe": {
+      "copied": 136,
+      "bytes": 355314,
+      "skipped": 0,
+      "last_msg_id": "13175b86ecdfc45e",
+      "completed": true
+    },
+    "Digital Hands": {
+      "copied": 1,
+      "bytes": 1818,
+      "skipped": 0,
+      "last_msg_id": "13493131eae22aac",
+      "completed": true
+    },
+    "Digital Hands/TMF Update": {
+      "copied": 1016,
+      "bytes": 4890381,
+      "skipped": 0,
+      "last_msg_id": "167cf9989a2ee81e",
+      "completed": true
+    },
+    "Digital Hands/aakif": {
+      "copied": 640,
+      "bytes": 135448612,
+      "skipped": 21,
+      "last_msg_id": "12e9b02cf1c08bf8",
+      "completed": true
+    },
+    "tut": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": "137a26203b6f57ce",
+      "completed": true
+    },
+    "Digital Hands/dH-Accounts": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "Digital Hands/suhaib": {
+      "copied": 250,
+      "bytes": 57880718,
+      "skipped": 18,
+      "last_msg_id": "12e9b67f99552e9d",
+      "completed": true
+    },
+    "Done!": {
+      "copied": 439,
+      "bytes": 332893734,
+      "skipped": 942,
+      "last_msg_id": "10d73e4d1731333c",
+      "completed": true
+    },
+    "GMX": {
+      "copied": 263,
+      "bytes": 17567937,
+      "skipped": 1,
+      "last_msg_id": "12e84dbbf67ede16",
+      "completed": true
+    },
+    "to do": {
+      "copied": 1,
+      "bytes": 2900,
+      "skipped": 0,
+      "last_msg_id": "139a0d8d7bb0ccee",
+      "completed": true
+    },
+    "jokester": {
+      "copied": 7,
+      "bytes": 30998,
+      "skipped": 0,
+      "last_msg_id": "12aae2d4af4e4ed7",
+      "completed": true
+    },
+    "eMoneySpace/b3byko": {
+      "copied": 15,
+      "bytes": 55225,
+      "skipped": 0,
+      "last_msg_id": "130e98b3a812c76f",
+      "completed": true
+    },
+    "GREEN_CIRCLE": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "GREEN_STAR": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "Infodart": {
+      "copied": 784,
+      "bytes": 240952060,
+      "skipped": 24,
+      "last_msg_id": "13ccdfc6d0dc24b8",
+      "completed": true
+    },
+    "Infodart/MFL": {
+      "copied": 405,
+      "bytes": 74231727,
+      "skipped": 487,
+      "last_msg_id": "13ccdfc6d0dc24b8",
+      "completed": true
+    },
+    "Infodart/bugzilla": {
+      "copied": 134,
+      "bytes": 541473,
+      "skipped": 0,
+      "last_msg_id": "13dfd5971a243bdf",
+      "completed": true
+    },
+    "LibertyReserve": {
+      "copied": 55,
+      "bytes": 166966,
+      "skipped": 0,
+      "last_msg_id": "12420be4adf1df2b",
+      "completed": true
+    },
+    "ORANGE_CIRCLE": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "ORANGE_STAR": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "PTC": {
+      "copied": 254,
+      "bytes": 1402523,
+      "skipped": 321,
+      "last_msg_id": "12999c7355227167",
+      "completed": true
+    },
+    "PTC/PAID": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "PTC/SCAM": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "PTC/TOO SLOW": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 2,
+      "last_msg_id": "12faa804081a3346",
+      "completed": true
+    },
+    "PURPLE_CIRCLE": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "PURPLE_STAR": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "RED_CIRCLE": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "RED_STAR": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "UNREAD": {
+      "copied": 1,
+      "bytes": 42,
+      "skipped": 1571,
+      "last_msg_id": "1269c632b1ece0c6",
+      "completed": true
+    },
+    "YELLOW_CIRCLE": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "YELLOW_STAR": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "[Imap]/Sent": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "aakif@digitalhands.co.in": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "admin@webhostx.tk": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "blog stuff": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "eBay": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "eMoneySpace": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "eMoneySpace/AGARA": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "eMoneySpace/amokspam": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "eMoneySpace/amykyo": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "eMoneySpace/lissaj": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "faaltu": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "facebook": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "hosting": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "hosting/File Hosting": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "hosting/Web Space": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "hosting/WordPress": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "mail@250free.tk": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "mail@digitalhands.co.in": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "money": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "saif bhai": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "saima khala": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 22,
+      "last_msg_id": "12057c05c493f928",
+      "completed": true
+    },
+    "suhaib@digitalhands.co.in": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "virus": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 7,
+      "last_msg_id": "123a5b1e373c671f",
+      "completed": true
+    },
+    "zaruri": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 0,
+      "last_msg_id": null,
+      "completed": false
+    },
+    "CATEGORY_FORUMS": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 8,
+      "last_msg_id": "17b8913b0c21dc99",
+      "completed": true
+    },
+    "CATEGORY_PERSONAL": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 126,
+      "last_msg_id": "12bf3331817a4055",
+      "completed": true
+    },
+    "CATEGORY_PROMOTIONS": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 868,
+      "last_msg_id": "12cd13e5dace19c5",
+      "completed": true
+    },
+    "CATEGORY_SOCIAL": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 7,
+      "last_msg_id": "13b17b4ee8132bc2",
+      "completed": true
+    },
+    "CATEGORY_UPDATES": {
+      "copied": 1,
+      "bytes": 6577,
+      "skipped": 763,
+      "last_msg_id": "12c15c1894030a07",
+      "completed": true
+    },
+    "DRAFT": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 8,
+      "last_msg_id": "12057cb880616164",
+      "completed": true
+    },
+    "IMPORTANT": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 202,
+      "last_msg_id": "12c695eee370c208",
+      "completed": true
+    },
+    "INBOX": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 1770,
+      "last_msg_id": "12057ee605188e34",
+      "completed": true
+    },
+    "SENT": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 50,
+      "last_msg_id": "12057a7c26653a82",
+      "completed": true
+    },
+    "STARRED": {
+      "copied": 0,
+      "bytes": 0,
+      "skipped": 3,
+      "last_msg_id": "1252c73e861a2686",
+      "completed": true
+    }
+  },
+  "completed_folders": [
+    "CHAT",
+    "Cash Cafe",
+    "Digital Hands",
+    "Digital Hands/TMF Update",
+    "Digital Hands/aakif",
+    "Digital Hands/suhaib",
+    "Done!",
+    "to do",
+    "jokester",
+    "tut",
+    "eMoneySpace/b3byko",
+    "GMX",
+    "Infodart",
+    "Infodart/MFL",
+    "Infodart/bugzilla",
+    "LibertyReserve",
+    "PTC",
+    "UNREAD",
+    "saima khala",
+    "virus",
+    "CATEGORY_FORUMS",
+    "CATEGORY_PERSONAL",
+    "CATEGORY_PROMOTIONS",
+    "CATEGORY_SOCIAL",
+    "CATEGORY_UPDATES",
+    "DRAFT",
+    "IMPORTANT",
+    "INBOX",
+    "SENT",
+    "STARRED",
+    "PTC/TOO SLOW"
+  ],
+  "last_msg_id": "12c4aa4348fc68e1"
+}

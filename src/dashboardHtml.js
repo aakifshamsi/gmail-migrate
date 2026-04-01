@@ -112,7 +112,10 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
     box.innerHTML = accts.map(function(email){
       return '<div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">'+
         '<span class="truncate text-sm">'+escapeHtml(email)+'</span>'+
-        '<button class="rounded-lg border border-rose-500/30 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/10" onclick="rmAcct('+JSON.stringify(email)+')">Remove</button>'+
+        '<div class="flex gap-2">'+
+          '<a href="/auth/'+encodeURIComponent(email)+'" class="rounded-lg border border-sky-500/30 px-3 py-1 text-xs text-sky-300 hover:bg-sky-500/10">Reconnect</a>'+
+          '<button class="rounded-lg border border-rose-500/30 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/10" onclick="rmAcct('+JSON.stringify(email)+')">Remove</button>'+
+        '</div>'+
       '</div>';
     }).join('');
   }
