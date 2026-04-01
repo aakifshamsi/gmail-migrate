@@ -1,0 +1,54 @@
+{
+  "name": "gmail-migrate dev",
+
+  // Python 3.12 + Node 20 — matches CI and production runtime
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  },
+
+  // Runs once after the container is created
+  "postCreateCommand": "pip install pytest && cd ui && npm install",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // KiloCode — Claude/OpenRouter AI in the editor (works in browser Codespaces)
+        "kilocode.kilo-code",
+        // Python + TypeScript tooling
+        "ms-python.python",
+        "ms-python.pylance",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python3",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+
+  // Forward Next.js dev server so it's accessible from browser
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": { "label": "Next.js UI", "onAutoForward": "openBrowser" }
+  },
+
+  // Persist bash history and npm cache between rebuilds
+  "mounts": [
+    "source=gmail-migrate-bashhistory,target=/root/commandhistory,type=volume",
+    "source=gmail-migrate-npmcache,target=/root/.npm,type=volume"
+  ],
+
+  "remoteEnv": {
+    // These are read from your Codespaces secrets (set once in GitHub Settings)
+    "WORKER_URL": "${localEnv:WORKER_URL}",
+    "WORKER_AUTH_TOKEN": "${localEnv:WORKER_AUTH_TOKEN}",
+    "GMAIL_SOURCE_USER": "${localEnv:GMAIL_SOURCE_USER}",
+    "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}",
+    "GITHUB_REPO": "${localEnv:GITHUB_REPO}",
+    "OPENROUTER_API_KEY": "${localEnv:OPENROUTER_API_KEY}"
+  }
+}
